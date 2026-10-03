@@ -37,6 +37,7 @@ pico_sdk_init()
 
 add_executable(picow_pitch_detector 
     src/main.cpp 
+    src/guitar_input.cpp
 )
 
 pico_set_program_name(picow_pitch_detector "picow_pitch_detector")
