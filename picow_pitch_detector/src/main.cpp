@@ -9,7 +9,7 @@
 struct CrossingEvent 
 {
     uint32_t sample_count;  // The number of ADC conversions performed before this sample
-    int16_t slope;
+    int32_t slope;
 };
 
 // Midpoint crossing event queue for passing data from ADC ISR to pitch estimation process
@@ -77,6 +77,8 @@ void guitar_input_isr()
         have_prev = true;
     }
 }
+
+
 /*
  * Configure the ADC into free-running sampling mode to continuously read the guitar input signal, save 
  * conversions into an 8 sample FIFO buffer, and trigger an interrupt that is handled by guitar_in_isr() 
@@ -131,6 +133,8 @@ int main()
     {
         // queue try remove to take crossing events from the queue and add them to pitch estimator history
         // compare candidate slopes, periods, etc.
+
+        
 
         printf("Hello, world!\n");
         sleep_ms(1000);
