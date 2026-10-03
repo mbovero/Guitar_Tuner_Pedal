@@ -93,9 +93,9 @@ void initialize_guitar_input()
     // Select input 0 from the MUX (routed to GPIO26)
     adc_select_input(0);
 
-    /* Setup an ADC FIFO that holds 8 samples; have each conversion written to the FIFO, disable DMA 
-    requests, trigger FIFO IRQ each time a sample is received, enable error bit, and disable DMA byte 
-    shifting */
+    // Set up an ADC FIFO that holds 8 samples; have each conversion written to the FIFO, 
+    // disable DMA requests, trigger FIFO IRQ each time a sample is received, enable 
+    // error bit, and disable DMA byte shifting 
     adc_fifo_setup(true, false, 1, true, false);
 
     // Set the ADC clock divisor to achieve the desired sampling rate
@@ -113,7 +113,7 @@ void initialize_guitar_input()
 }
 
 /*
- * Non-blocking removal of the oldest queue entry if non empty.
+ * Non-blocking removal of the oldest midpoint crossing event queue entry if non empty.
  * If non empty, returns true and copies the removed entry into the provided location.
  * Otherwise, returns false.
 */
