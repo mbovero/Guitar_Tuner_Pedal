@@ -36,7 +36,9 @@ int main()
         if (!history.try_get(0, oldest) ||
             !history.try_get(event_count - 1, newest))
         {
-            continue; // TODO: If either retrievals fail, log error 
+            // If either retrievals fail, log error and skip frequency estimation
+            DEBUG_PRINT("ERROR: Failed to retrieve crossing event from history!");
+            continue; 
         }
 
         // Calculate total elapsed samples as float
@@ -51,9 +53,7 @@ int main()
         // Convert average period in ADC cycles to frequency
         const float avg_freq_hz = sample_rate_hz / avg_period_cycles;
 
-        DEBUG_PRINT("Estimated frequency: %.2f Hz\n", avg_freq_hz);
+        DEBUG_PRINT("Estimated frequency: %.5f Hz\n", avg_freq_hz);
 
-        printf("Hello, world!\n");
-        sleep_ms(1000);
     }
 }
