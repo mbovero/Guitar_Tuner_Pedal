@@ -42,7 +42,7 @@ add_executable(picow_pitch_detector
 )
 
 target_compile_definitions(picow_pitch_detector PRIVATE
-    TUNER_DEBUG = 1
+    TUNER_DEBUG=1
 )
 
 pico_set_program_name(picow_pitch_detector "picow_pitch_detector")
