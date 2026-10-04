@@ -38,6 +38,11 @@ pico_sdk_init()
 add_executable(picow_pitch_detector 
     src/main.cpp 
     src/guitar_input.cpp
+    src/crossing_history.cpp
+)
+
+target_compile_definitions(picow_pitch_detector PRIVATE
+    TUNER_DEBUG = 1
 )
 
 pico_set_program_name(picow_pitch_detector "picow_pitch_detector")
