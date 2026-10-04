@@ -6,7 +6,7 @@
 
 // Midpoint crossing event queue for passing data from ADC ISR to pitch estimation process
 static queue_t crossing_queue;
-// Midpoint crossing event queue can hold a maximum of 64 events
+// Midpoint crossing event queue's maximum number of entries
 constexpr unsigned crossing_queue_cap = 64;
 
 /*
