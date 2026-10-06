@@ -29,11 +29,15 @@ static void guitar_input_isr()
         // Retrieve a raw FIFO sample
         const uint16_t raw_sample = adc_fifo_get();
 
-        // If an error occured, reset the midpoint crossing history and skip processing this sample
+        // Handle ADC sample errors
         if ((raw_sample & 0x8000u) != 0)
         {
-            // TODO: reset midpoint crossing history
+            // Still track sample count to maintain period accuracy
+            ++sample_count;
+            // Invalidate this sample, initialize next sample as previous
+            have_prev = false;
 
+            // TODO: notify frequency estimator of discontinuity
             continue;
         }
 
@@ -41,7 +45,7 @@ static void guitar_input_isr()
         int16_t sample = static_cast<int16_t>((raw_sample & 0x0FFF));
 
         // Remove the VBIAS offset from the sample to center it around 0
-        sample -= 2048; // 2048 is half of the 12-bit ADC resolution representing 1.65 V
+        sample -= 2234; // 2048 is half of the 12-bit ADC resolution representing 1.65 V
 
         // If there is a previous sample to compare to, and this is a midpoint crossing:
         if (have_prev && 
