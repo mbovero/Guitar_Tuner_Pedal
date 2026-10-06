@@ -14,97 +14,106 @@ int main()
     // Create a ring buffer to hold history of midpoint crossing timestamps and slopes
     CrossingHistory history{};
 
+    
+    // Set up variables for resetting reference slope after certain time without matches
+    uint32_t last_match_us = time_us_32();
+    constexpr uint32_t ref_slope_reset_us = 25'000;
+    // Reference slope used to identify beginning/end of waveform period
+    int32_t ref_slope = 0;
+    // Whether a valid reference slope has been set; helps initialize/reset ref_slope
+    bool have_reference = false;
+    // Variables used to monitor changing reference slope
+    int32_t prev_ref_slope = ref_slope;
+    bool ref_slope_updated = false;
+    // The latest event with a slope matching the reference slope
+    CrossingEvent prev_match{};
+    // How much a compared slope can vary from reference slope and still be considered matching
+    constexpr uint16_t ref_slope_tolerance = 3;
+
+    // Set up variables for regularly printing status updates
+    uint32_t last_print_us = time_us_32();
+    constexpr uint32_t print_interval_us = 500'000; // 2 Hz
+    float latest_freq_hz = 0.0f;
+    bool freq_updated = false;
+    CrossingEvent debug_event{0,0};
+
     while (true) 
     {
-        // Continuously drain the queue and push midpoint crossing events to the history ring buffer
+        // Continuously drain the queue and process midpoint crossing events
         CrossingEvent event;
         while (try_get_crossing_event(event))
         {
             history.push(event);
-        }
+            debug_event = event;
 
-        // Once all queued crossing events have been recorded:
-        // If there is only one recorded crossing event, no comparisons can be made
-        const size_t event_count = history.size();
-        if (event_count < 2)
-        {
-            continue;
-        }
-
-        // The latest event with a slope matching the max slope (initially 0, 0)
-        static CrossingEvent prev_match{0, 0};
-
-        // Number of consecutive comparisons made to the max slope without resulting in a match (initially 0)
-        static uint16_t failed_matches = 0;
-        // Maximum number of consecutive failed match attempts that can occur before max slope resets
-        static constexpr uint16_t max_failed_matches = 5;
-        // How much a compared slope can vary from max slope and still be considered matching
-        static constexpr uint16_t max_slope_tolerance = 15;
-
-        // Maximum identified crossing event slope (initially 0)
-        static int32_t max_slope = 0;
-
-        // Iterate through midpoint crossing history to find similar entry slopes and mark periods
-        for (size_t i = 0; i < event_count; ++i)
-        {
-            // Attempt to retrieve event from history
-            if (!history.try_get(i, event))
+            // Set a reference slope if one doesn't exist
+            if (!have_reference)
             {
-                // If a retrieval fails, print error and skip frequency estimation
-                DEBUG_PRINT("ERROR: Failed to retrieve crossing event from history!");
-                break;
+                prev_ref_slope = ref_slope;
+                ref_slope = event.slope;
+                prev_match = event;
+                last_match_us = time_us_32();
+                have_reference = true;
+                ref_slope_updated = true;
+                continue;
             }
 
-            //DEBUG_PRINT("Slope: %d \n", event.slope);
-
-            // If this event's slope matches the max slope, print the estimated frequency
-            if (std::abs(max_slope - event.slope) <= max_slope_tolerance)
+            // If this event's slope matches the reference slope, print the estimated frequency
+            if (std::abs(ref_slope - event.slope) <= ref_slope_tolerance)
             {
                 // Calculate total elapsed samples as float
                 const float elapsed_samples = static_cast<float>(event.sample_count - prev_match.sample_count);
 
                 // Convert average period in ADC cycles to frequency
-                const float avg_freq_hz = sample_rate_hz / elapsed_samples;
-
-                DEBUG_PRINT("Estimated frequency: %.5f Hz\n", avg_freq_hz);
-                //DEBUG_PRINT("Max Slope: %d \n", max_slope);
+                latest_freq_hz = sample_rate_hz / elapsed_samples;
+                freq_updated = true;
 
                 // Update last matched event to this one
                 prev_match = event;
-                // Reset failed event slope match counter
-                failed_matches = 0;
-                // TODO: dynamically updating max slope?
-                max_slope = event.slope;
-                continue;
+                // Update last reference slope match timestamp
+                last_match_us = time_us_32();
+
+                // TODO: dynamically updating reference slope?
             }
 
-            if (failed_matches >= max_failed_matches)
+        }
+
+        // Get current time for upkeep tasks
+        const uint32_t now_us = time_us_32();
+
+        // Reset the reference slope if one exists and no matches occured over a certain timeframe
+        if (have_reference &&
+            now_us - last_match_us > ref_slope_reset_us)
+        {
+            // Invalidate current reference so it is reset when the next event is processed
+            have_reference = false;
+            // Prevent current frequency estimate from being outputted
+            freq_updated = false;
+        }
+
+
+        // Regularly print status updates
+        if ((now_us - last_print_us) >= print_interval_us)
+        {
+            DEBUG_PRINT("\n");
+
+            if (ref_slope_updated &&
+                (prev_ref_slope != ref_slope))
             {
-                DEBUG_PRINT("Reset max slope: %d \n", max_slope);
+                DEBUG_PRINT("Reset reference slope from %d\n", prev_ref_slope);
+                ref_slope_updated = false;
             }
 
-            // If maxmimum number of max failed matches has been reached, reset variables
-            // OR if this event's slope is greater than max slope, update variables
-            if ((failed_matches >= max_failed_matches) ||
-                (event.slope > max_slope))
+            if (freq_updated)
             {
-                // Reset max slope and reset failed match count
-                max_slope = event.slope;
-                failed_matches = 0;
-                // Reset last matched event to this one
-                prev_match = event;
-                // No need for comparison to itself, skip to next event
-                continue;
-            }
+                DEBUG_PRINT("Estimated frequency: %.5f Hz\n", latest_freq_hz);
+                DEBUG_PRINT("Reference slope: %d \n", ref_slope);
+                DEBUG_PRINT("Latest slope: %d \n", debug_event.slope);
+                freq_updated = false;
+            }    
 
-            // Otherwise, current event slope does not match, so increment failed slope match count
-            ++failed_matches;
-        } 
-
-
-
-
-
+            last_print_us = now_us;
+        }
 
     }
 }
