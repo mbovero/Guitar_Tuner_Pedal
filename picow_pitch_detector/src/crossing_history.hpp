@@ -11,7 +11,7 @@
 struct CrossingEvent 
 {
     uint32_t sample_count;  // The number of ADC conversions performed before this sample
-    int32_t slope;
+    int32_t slope;  // Note: Should be positive for proper program execution
 };
 
 
