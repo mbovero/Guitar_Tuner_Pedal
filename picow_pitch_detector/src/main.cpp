@@ -11,8 +11,6 @@ int main()
 
     // Set up the ADC to intake the guitar signal and queue midpoint crossing events
     initialize_guitar_input();
-    // Create a ring buffer to hold history of midpoint crossing timestamps and slopes
-    CrossingHistory history{};
 
     
     // Set up variables for resetting reference slope after certain time without matches
@@ -37,13 +35,17 @@ int main()
     bool freq_updated = false;
     CrossingEvent debug_event{0,0};
 
+    // Latest statistics from the ADC ISR
+    ADCBlockStats latest_adc_stats{};
+    // Flag to initialize latest ADC statistics struct
+    bool have_adc_stats = false;
+
     while (true) 
     {
-        // Continuously drain the queue and process midpoint crossing events
+        // Continuously drain the midpoint crossing event queue and process events
         CrossingEvent event;
         while (try_get_crossing_event(event))
         {
-            history.push(event);
             debug_event = event;
 
             // Set a reference slope if one doesn't exist
@@ -78,10 +80,19 @@ int main()
 
         }
 
+        // Continuously drain the ADC block stats queue and store stats
+        ADCBlockStats stats;
+        while (try_get_adc_block_stats(stats))
+        {
+            latest_adc_stats = stats;
+            have_adc_stats = true;
+        }
+
+
         // Get current time for upkeep tasks
         const uint32_t now_us = time_us_32();
 
-        // Reset the reference slope if one exists and no matches occured over a certain timeframe
+        // Reset the reference slope if it's initialized and no matches occured over a certain timeframe
         if (have_reference &&
             now_us - last_match_us > ref_slope_reset_us)
         {
@@ -111,6 +122,17 @@ int main()
                 DEBUG_PRINT("Latest slope: %d \n", debug_event.slope);
                 freq_updated = false;
             }    
+
+            if (have_adc_stats)
+            {
+                DEBUG_PRINT("ADC: P2P=%u, mean=%.2f, min=%d, max=%d \n",
+                latest_adc_stats.p2p,
+                latest_adc_stats.mean,
+                latest_adc_stats.min,
+                latest_adc_stats.max);
+
+                DEBUG_PRINT("Midpoint: %d \n", latest_adc_stats.midpoint);
+            }
 
             last_print_us = now_us;
         }
