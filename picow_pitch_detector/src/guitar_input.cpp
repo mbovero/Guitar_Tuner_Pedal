@@ -4,11 +4,15 @@
 #include "hardware/irq.h"
 #include "pico/util/queue.h"
 #include <algorithm>
+#include <cmath>
 
 // Midpoint crossing event queue for passing data from ADC ISR to pitch estimation process
 static queue_t crossing_queue;
 // Midpoint crossing event queue's maximum number of entries
 static constexpr unsigned crossing_queue_cap = 64;
+
+// Boolean indicating that there is an up-to-date previous sample
+static bool have_prev = false;
 
 // ADC stats queue for passing statistics from ADC ISR to main while loop
 static queue_t adc_stats_queue;
@@ -22,9 +26,7 @@ static ADCBlockStats current_adc_block
     4095,   // Min: highest possible ADC value
     0,      // Max: lowest possible ADC value
     0,      // Sum
-    0,      // Number of samples
-    0,
-    0
+    0      // Number of samples
 };
 
 // Threshold to go from idle state to active state
@@ -34,9 +36,18 @@ static constexpr unsigned idle_threshold = 200;
 // Current state of the signal input
 static InputState state = InputState::Idle;
 
-// The estimated midpoint voltage measured by the ADC during idle input
-static int16_t midpoint = 2234;
+// Number of consecutive ADC blocks with p2p below the idle threshold
+static uint32_t quiet_blocks = 0;
+// Number of consecutive quiet ADC blocks before midpoint can be adjusted
+static constexpr uint16_t quiet_blocks_threshold = 16;
+// The midpoint voltage adjusted by ADC measurements when the input is idle and quiet
+static float midpoint_estimate = 2048.0f;
+// The rounded integer midpoint used to remove offset from raw ADC samples
+static int16_t midpoint = 2048;
 
+// Counts for errors
+static int32_t adc_error_count = 0;
+static int32_t queue_error_count = 0;
 
 /*
  * Updates the current ADC block statistics with the provided sample.
@@ -59,31 +70,43 @@ static void record_adc_sample(uint16_t sample)
         const unsigned peak_to_peak = current_adc_block.max - current_adc_block.min;
         const float mean = static_cast<float>(current_adc_block.sum) / current_adc_block.samples;
 
-        // After each block, update input state
-        if (peak_to_peak <= idle_threshold)
+        // After each block, update state
+        if (peak_to_peak < idle_threshold)
         {
             state = InputState::Idle;
+            ++quiet_blocks;
         } 
         else if (peak_to_peak >= active_threshold)
         {
+            // If transitioning from idle to active
+            if (state == InputState::Idle)
+            {
+                have_prev = false;
+                quiet_blocks = 0;
+            }
+
             state = InputState::Active;
         }
 
-        // Gradually adjust midpoint while idle
-        if (state == InputState::Idle)
+        // Gradually adjust midpoint when input is quiet
+        if (quiet_blocks > quiet_blocks_threshold)
         {
-            midpoint += 0.125f * (mean - midpoint);
+            midpoint_estimate += 0.125f * (mean - midpoint);
+
+            midpoint = static_cast<int16_t>(std::lround(midpoint_estimate));
         }
 
         // Update final stats
         current_adc_block.p2p = peak_to_peak;
         current_adc_block.mean = mean;
         current_adc_block.midpoint = midpoint;
+        current_adc_block.adc_errors = adc_error_count;
+        current_adc_block.queue_errors = queue_error_count;
 
         // Push statistics to queue; discard if queue is full
         (void)queue_try_add(&adc_stats_queue, &current_adc_block);
         // Reset current ADC block stats to begin new block
-        current_adc_block = {4095, 0, 0, 0, 0, 0};
+        current_adc_block = {4095, 0, 0, 0};
     }    
 }
 
@@ -99,8 +122,6 @@ static void guitar_input_isr()
     static uint32_t sample_count = 0;
     // Initialize previous sample to 0
     static int16_t prev_sample = 0;
-    // Indicate that there is initially no previous sample
-    static bool have_prev = false;
     
     // While the FIFO buffer has samples, process them
     while (!adc_fifo_is_empty())
@@ -119,6 +140,7 @@ static void guitar_input_isr()
             current_adc_block = {4095, 0, 0, 0};
 
             // TODO: notify frequency estimator of discontinuity
+            ++adc_error_count;
             continue;
         }
 
@@ -130,7 +152,7 @@ static void guitar_input_isr()
         // Convert sample data to a signed integer
         int16_t sample = static_cast<int16_t>(usample);
         // Remove the VBIAS offset from the sample to center it around 0
-        sample -= midpoint; // 2048 is half of the 12-bit ADC resolution representing 1.65 V
+        sample -= midpoint;
 
         
         if (state == InputState::Active &&      // If there is an active input,
@@ -148,6 +170,7 @@ static void guitar_input_isr()
             if (!queue_try_add(&crossing_queue, &event))
             {
                 // TODO: queue is full, record error and/or signal to pitch estimator
+                ++queue_error_count;
             }
         }
 
