@@ -33,41 +33,70 @@ int main()
     constexpr uint32_t print_interval_us = 500'000; // 2 Hz
     float latest_freq_hz = 0.0f;
     bool freq_updated = false;
-    CrossingEvent debug_event{0,0};
+    CrossingEvent debug_crossing{0,0};
 
     // Latest statistics from the ADC ISR
     ADCBlockStats latest_adc_stats{};
     // Flag to initialize latest ADC statistics struct
     bool have_adc_stats = false;
 
+    // Current input handler state
+    InputState input_state = InputState::Idle;
+
     while (true) 
     {
         // Continuously drain the midpoint crossing event queue and process events
-        CrossingEvent event;
-        while (try_get_crossing_event(event))
+        InputEvent event;
+        while (try_get_input_event(event))
         {
-            debug_event = event;
+            // Handle state change events
+            if (event.type == InputEventType::StateChanged)
+            {
+                // Store current state
+                input_state = event.state;
+
+                // Reset reference slope
+                have_reference = false;
+                ref_slope_updated = false;
+                // Reset estimated frequency
+                latest_freq_hz = 0.0f;
+                freq_updated = false;
+
+                // Process next event
+                continue;
+            }
+
+            // If the input is not active, don't process other events
+            if (input_state != InputState::Active)
+            {
+                continue;
+            }
+
+            // Otherwise, handle event as a crossing event
+            const CrossingEvent& crossing = event.crossing;
+            // Copy of the crossing event for debug prints
+            debug_crossing = crossing;
 
             // Set a reference slope if one doesn't exist
             if (!have_reference)
             {
                 prev_ref_slope = ref_slope;
-                ref_slope = event.slope;
-                prev_match = event;
-                last_match_us = time_us_32();
-                have_reference = true;
+                ref_slope = crossing.slope;
                 ref_slope_updated = true;
+                last_match_us = time_us_32();
+                prev_match = crossing;
+                have_reference = true;
                 continue;
             }
 
             // If this event's slope matches the reference slope, print the estimated frequency
-            if (std::abs(ref_slope - event.slope) <= ref_slope_tolerance)
+            if (std::abs(ref_slope - crossing.slope) <= ref_slope_tolerance)
             {
                 // Calculate total elapsed samples as float
-                const float elapsed_samples = static_cast<float>(event.sample_count - prev_match.sample_count);
+                const float elapsed_samples = static_cast<float>(crossing.sample_count - prev_match.sample_count);
 
                 // Skip zero periods
-                if (elapsed_samples == 0)
+                if (elapsed_samples == 0.0f)
                 {
                     continue;
                 }
@@ -77,7 +106,7 @@ int main()
                 freq_updated = true;
 
                 // Update last matched event to this one
-                prev_match = event;
+                prev_match = crossing;
                 // Update last reference slope match timestamp
                 last_match_us = time_us_32();
 
@@ -114,6 +143,14 @@ int main()
         {
             DEBUG_PRINT("\n");
 
+            if (input_state == InputState::Active)
+            {
+                DEBUG_PRINT("State: Active\n");
+            }else
+            {
+                DEBUG_PRINT("State: Idle\n");
+            }
+
             if (ref_slope_updated &&
                 (prev_ref_slope != ref_slope))
             {
@@ -121,11 +158,12 @@ int main()
                 ref_slope_updated = false;
             }
 
-            if (freq_updated)
+            if (input_state == InputState::Active &&
+                freq_updated)
             {
                 DEBUG_PRINT("Estimated frequency: %.5f Hz\n", latest_freq_hz);
                 DEBUG_PRINT("Reference slope: %d \n", ref_slope);
-                DEBUG_PRINT("Latest slope: %d \n", debug_event.slope);
+                DEBUG_PRINT("Latest slope: %d \n", debug_crossing.slope);
                 freq_updated = false;
             }    
 
@@ -138,8 +176,8 @@ int main()
                 latest_adc_stats.max);
 
                 DEBUG_PRINT("Midpoint: %d \n", latest_adc_stats.midpoint);
-                DEBUG_PRINT("ADC Errors: %d \n", latest_adc_stats.adc_errors);
-                DEBUG_PRINT("Queue Errors: %d \n", latest_adc_stats.queue_errors);
+                // DEBUG_PRINT("ADC Errors: %d \n", latest_adc_stats.adc_errors);
+                // DEBUG_PRINT("Queue Errors: %d \n", latest_adc_stats.queue_errors);
             }
 
             last_print_us = now_us;
