@@ -23,6 +23,8 @@ struct ADCBlockStats
     unsigned p2p;
     float mean;
     int16_t midpoint;
+    int32_t adc_errors;
+    int32_t queue_errors;
 };
 
 void initialize_guitar_input();

@@ -66,6 +66,12 @@ int main()
                 // Calculate total elapsed samples as float
                 const float elapsed_samples = static_cast<float>(event.sample_count - prev_match.sample_count);
 
+                // Skip zero periods
+                if (elapsed_samples == 0)
+                {
+                    continue;
+                }
+
                 // Convert average period in ADC cycles to frequency
                 latest_freq_hz = sample_rate_hz / elapsed_samples;
                 freq_updated = true;
@@ -132,6 +138,8 @@ int main()
                 latest_adc_stats.max);
 
                 DEBUG_PRINT("Midpoint: %d \n", latest_adc_stats.midpoint);
+                DEBUG_PRINT("ADC Errors: %d \n", latest_adc_stats.adc_errors);
+                DEBUG_PRINT("Queue Errors: %d \n", latest_adc_stats.queue_errors);
             }
 
             last_print_us = now_us;
