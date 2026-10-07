@@ -7,12 +7,9 @@
 #include <cmath>
 
 // Midpoint crossing event queue for passing data from ADC ISR to pitch estimation process
-static queue_t crossing_queue;
+static queue_t input_event_queue;
 // Midpoint crossing event queue's maximum number of entries
-static constexpr unsigned crossing_queue_cap = 64;
-
-// Boolean indicating that there is an up-to-date previous sample
-static bool have_prev = false;
+static constexpr unsigned input_event_queue_cap = 64;
 
 // ADC stats queue for passing statistics from ADC ISR to main while loop
 static queue_t adc_stats_queue;
@@ -74,24 +71,22 @@ static void record_adc_sample(uint16_t sample)
         if (peak_to_peak < idle_threshold)
         {
             state = InputState::Idle;
+
+            // Also track number of consecutive quiet blocks
             ++quiet_blocks;
         } 
         else if (peak_to_peak >= active_threshold)
         {
-            // If transitioning from idle to active
-            if (state == InputState::Idle)
-            {
-                have_prev = false;
-                quiet_blocks = 0;
-            }
-
             state = InputState::Active;
+
+            // Reset quiet blocks count
+            quiet_blocks = 0;
         }
 
         // Gradually adjust midpoint when input is quiet
         if (quiet_blocks > quiet_blocks_threshold)
         {
-            midpoint_estimate += 0.125f * (mean - midpoint);
+            midpoint_estimate += 0.125f * (mean - midpoint_estimate);
 
             midpoint = static_cast<int16_t>(std::lround(midpoint_estimate));
         }
@@ -122,7 +117,9 @@ static void guitar_input_isr()
     static uint32_t sample_count = 0;
     // Initialize previous sample to 0
     static int16_t prev_sample = 0;
-    
+    // Boolean indicating that there is an up-to-date previous sample
+    static bool have_prev = false;
+
     // While the FIFO buffer has samples, process them
     while (!adc_fifo_is_empty())
     {
@@ -146,8 +143,31 @@ static void guitar_input_isr()
 
         // Isolate the 12-bit sample data as an unsigned integer
         uint16_t usample = (raw_sample & 0x0FFFu);
+
+        // Store previous state before updating it
+        const InputState prev_state = state;
         // Update ADC block statistics
         record_adc_sample(usample);
+
+        if (state != prev_state)
+        {
+            // Avoid comparing samples across state transitions
+            have_prev = false;
+
+            // Format a state change event
+            const InputEvent event
+            {
+                InputEventType::StateChanged,
+                state
+            };
+
+            // Send state change event to main
+            if (!queue_try_add(&input_event_queue, &event))
+            {
+                // TODO: robust queue full handling
+                ++queue_error_count;
+            }
+        }
 
         // Convert sample data to a signed integer
         int16_t sample = static_cast<int16_t>(usample);
@@ -160,14 +180,18 @@ static void guitar_input_isr()
             (prev_sample < 0 && sample >= 0))   // and this is a midpoint crossing:
         {
             // Create a midpoint crossing event
-            const CrossingEvent event
+            const InputEvent event
             {
-                sample_count,           // Store the current sample count as a timestamp
-                (sample - prev_sample)  // Store the approximate slope at this timestamp
+                InputEventType::Crossing,
+                state,
+                {
+                    sample_count,           // Store the current sample count as a timestamp
+                    (sample - prev_sample)  // Store the approximate slope at this timestamp
+                }
             };
             
-            // Try to push it to the midpoint crossing event queue to be processed
-            if (!queue_try_add(&crossing_queue, &event))
+            // Try to push it to the event queue to be processed
+            if (!queue_try_add(&input_event_queue, &event))
             {
                 // TODO: queue is full, record error and/or signal to pitch estimator
                 ++queue_error_count;
@@ -193,9 +217,9 @@ void initialize_guitar_input()
 {
     // Initialize the midpoint crossing event queue
     queue_init(
-        &crossing_queue,        // Pointer to the queue to be initialized
-        sizeof(CrossingEvent),  // Size of each entry in the queue
-        crossing_queue_cap      // Maximum number of entries
+        &input_event_queue,     // Pointer to the queue to be initialized
+        sizeof(InputEvent),     // Size of each entry in the queue
+        input_event_queue_cap   // Maximum number of entries
     );
 
     // Initialize the ADC block statistics queue
@@ -237,9 +261,9 @@ void initialize_guitar_input()
  * If non empty, returns true and copies the removed entry into the provided location.
  * Otherwise, returns false.
 */
-bool try_get_crossing_event(CrossingEvent& event)
+bool try_get_input_event(InputEvent& event)
 {
-    return queue_try_remove(&crossing_queue, &event);
+    return queue_try_remove(&input_event_queue, &event);
 }
 
 /*
