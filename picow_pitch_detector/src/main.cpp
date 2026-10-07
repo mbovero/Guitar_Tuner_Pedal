@@ -15,7 +15,7 @@ int main()
     
     // Set up variables for resetting reference slope after certain time without matches
     uint32_t last_match_us = time_us_32();
-    constexpr uint32_t ref_slope_reset_us = 25'000;
+    constexpr uint32_t ref_slope_reset_us = 40'000;
     // Reference slope used to identify beginning/end of waveform period
     int32_t ref_slope = 0;
     // Whether a valid reference slope has been set; helps initialize/reset ref_slope
@@ -92,11 +92,19 @@ int main()
             // If this event's slope matches the reference slope, print the estimated frequency
             if (std::abs(ref_slope - crossing.slope) <= ref_slope_tolerance)
             {
-                // Calculate total elapsed samples as float
-                const float elapsed_samples = static_cast<float>(crossing.sample_count - prev_match.sample_count);
+                // Interpolate crossing data to get more accurate timestamps
+                // Calculate how far back true midpoint crossing is from previous crossing's positive ADC value
+                const float prev_backtrack = static_cast<float>(prev_match.sample_after) / prev_match.slope;
+                // Calculate how far back true midpoint crossing is from current crossing's positive ADC value
+                const float current_backtrack = static_cast<float>(crossing.sample_after) / crossing.slope;
+                // Calculate total elasped whole integer samples
+                const uint32_t whole_samples = crossing.sample_count - prev_match.sample_count;
 
-                // Skip zero periods
-                if (elapsed_samples == 0.0f)
+                // Backtrack from each crossing's positive ADC value to calculate more precise elapsed samples
+                const float elapsed_samples = static_cast<float>(whole_samples) + prev_backtrack - current_backtrack;
+
+                // Skip impossible periods
+                if (elapsed_samples <= 0.0f)
                 {
                     continue;
                 }

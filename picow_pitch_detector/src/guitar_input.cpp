@@ -86,9 +86,16 @@ static void record_adc_sample(uint16_t sample)
             // Reset quiet blocks count
             quiet_blocks = 0;
         }
+        else
+        {
+            // When between thresholds, maintain state but do not count as quiet blocks
+            quiet_blocks = 0;
+        }
 
         // Gradually adjust midpoint when input is quiet
-        if (quiet_blocks > quiet_blocks_threshold)
+        if (state == InputState::Idle &&
+            peak_to_peak < idle_threshold &&
+            quiet_blocks > quiet_blocks_threshold)
         {
             midpoint_estimate += 0.125f * (mean - midpoint_estimate);
 
@@ -206,7 +213,8 @@ static void guitar_input_isr()
                 state,
                 {
                     sample_count,           // Store the current sample count as a timestamp
-                    (sample - prev_sample)  // Store the approximate slope at this timestamp
+                    (sample - prev_sample), // Store the approximate slope at this timestamp
+                    sample                  // Store the sample after the crossing for interpolation
                 }
             };
             
