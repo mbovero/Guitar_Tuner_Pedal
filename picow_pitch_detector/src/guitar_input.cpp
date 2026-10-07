@@ -42,9 +42,13 @@ static float midpoint_estimate = 2048.0f;
 // The rounded integer midpoint used to remove offset from raw ADC samples
 static int16_t midpoint = 2048;
 
+// Number of ADC counts signal must drop below midpoint to accept the next rising crossing
+static constexpr int16_t crossing_hysteresis = 50;
+
 // Counts for errors
 static int32_t adc_error_count = 0;
 static int32_t queue_error_count = 0;
+
 
 /*
  * Updates the current ADC block statistics with the provided sample.
@@ -109,7 +113,7 @@ static void record_adc_sample(uint16_t sample)
 /*
  * Interrupt service routine for handling ADC samples:
  * Watches ADC input for midpoint crossings and pushes their timestamps and slope to the 
- * midpoint crossing event queue for further processing.
+ * event queue for further processing.
  */
 static void guitar_input_isr()
 {
@@ -119,7 +123,8 @@ static void guitar_input_isr()
     static int16_t prev_sample = 0;
     // Boolean indicating that there is an up-to-date previous sample
     static bool have_prev = false;
-
+    // Boolean indicating the signal reached the hysteresis arming threshold, so the next midpoint crossing should be recorded
+    static bool crossing_armed = false;
     // While the FIFO buffer has samples, process them
     while (!adc_fifo_is_empty())
     {
@@ -133,6 +138,8 @@ static void guitar_input_isr()
             ++sample_count;
             // Invalidate this sample, initialize next sample as previous
             have_prev = false;
+            // Disarm (reset hysteresis state)
+            crossing_armed = false;
             // Reset ADC block statistics
             current_adc_block = {4095, 0, 0, 0};
 
@@ -149,10 +156,14 @@ static void guitar_input_isr()
         // Update ADC block statistics
         record_adc_sample(usample);
 
+        // Handle state changes
         if (state != prev_state)
         {
             // Avoid comparing samples across state transitions
             have_prev = false;
+            // Disarm (reset hysteresis state)
+            crossing_armed = false;
+
 
             // Format a state change event
             const InputEvent event
@@ -174,8 +185,17 @@ static void guitar_input_isr()
         // Remove the VBIAS offset from the sample to center it around 0
         sample -= midpoint;
 
+        // Check if hysteresis threshold reached
+        if (state == InputState::Active &&
+            sample <= -crossing_hysteresis)
+        {
+            // Accept the next midpoint crossing
+            crossing_armed = true;
+        }
         
+        // Check if a midpoint crossing should be recorded
         if (state == InputState::Active &&      // If there is an active input,
+            crossing_armed &&                   // input is armed to accept a new crossing (hysteresis),
             have_prev &&                        // there is a previous sample to compare to,
             (prev_sample < 0 && sample >= 0))   // and this is a midpoint crossing:
         {
@@ -196,6 +216,9 @@ static void guitar_input_isr()
                 // TODO: queue is full, record error and/or signal to pitch estimator
                 ++queue_error_count;
             }
+
+            // Disarm to prevent noise from triggering unwanted crossings
+            crossing_armed = false;
         }
 
         // Increment the sample count

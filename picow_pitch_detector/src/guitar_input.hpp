@@ -13,7 +13,7 @@ enum class InputEventType
     StateChanged
 };
 
-// Possible states of the tuner pedal's signal input
+// Possible states of the tuner pedal's input
 enum class InputState
 {
     Idle,
