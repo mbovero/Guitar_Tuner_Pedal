@@ -7,7 +7,7 @@
 #include <cmath>
 
 // State of the period estimator
-enum class PeriodState
+enum class EstimatorState
 {
     Acquiring,  // Considering candidate periods before committing to one
     Tracking    // Actively tracking a calculated period and improving estimates
@@ -16,71 +16,70 @@ enum class PeriodState
 int main()
 {
     stdio_init_all();
-
     // Set up the ADC to intake the guitar signal and queue midpoint crossing events
     initialize_guitar_input();
 
-    
+    // The most recent estimated frequency
+    float latest_freq_hz = 0.0f;
     // Supported frequency range in Hz
     constexpr float min_frequency_hz = 40.0f;
     constexpr float max_frequency_hz = 1500.0f;
-    // Supported frequenct range in terms of ADC samples
+    // Supported frequency range in terms of ADC samples
     constexpr float min_period_samples = sample_rate_hz / max_frequency_hz;
     constexpr float max_period_samples = sample_rate_hz / min_frequency_hz;
 
+    // Reference slope used to identify beginning/end of waveform period
+    float ref_slope = 0.0f;
+    // Whether a valid reference slope has been set; helps initialize/reset ref_slope
+    bool have_reference = false;
     // How much a compared slope can vary from reference slope and still be considered matching
     constexpr float slope_noise_allowance = 10.0f;
     constexpr float slope_relative_allowance = 0.1f;
-
-    // Tolerance allowed for matching candidate periods
-    constexpr float period_relative_allowance = 0.08f;
-
-    // Number of consistent intervals required before reporting frequency
-    constexpr unsigned acquisition_intervals = 3;
-
-    // Smoothing factors applied to accepted measurements
-    constexpr float period_alpha = 0.2f;
+    // Smoothing factor applied to accepted measurements to update slope estimate
     constexpr float slope_alpha = 0.1f;
 
-    // Default configuration allows four periods at lowest supported frequency
-    // With a 40 Hz minimum, timeout is 100 ms
-    constexpr uint32_t estimator_timeout_us = static_cast<uint32_t>(4'000'000.0f / min_frequency_hz);
-
-    PeriodState period_state = PeriodState::Acquiring;
-    
-    // Whether a valid reference slope has been set; helps initialize/reset ref_slope
-    bool have_reference = false;
-    // Reference slope used to identify beginning/end of waveform period
-    float ref_slope = 0.0f;
-    // The latest accepted crossing event event
+    // The latest accepted crossing event (used to estimate period)
     CrossingEvent prev_match{};
 
-    unsigned consistent_intervals = 0;
+    // Running average of acquired/tracked periods in terms of # of ADC samples
     float mean_period_samples = 0.0f;
+    // Tolerance allowed for matching candidate periods
+    constexpr float period_relative_allowance = 0.08f;
+    // Smoothing factor applied to accepted measurements to update period estimate
+    constexpr float period_alpha = 0.2f;
 
+    // Current input handler state
+    InputState input_state = InputState::Idle;
+    // Current state of the estimator (either Acquiring or Tracking)
+    EstimatorState estimator_state = EstimatorState::Acquiring;
+
+    // Number of times consecutive period candidates matched (used to transition from Acquiring to Tracking)
+    unsigned consistent_intervals = 0;
+    // Number of consistent intervals required before starting period tracking
+    constexpr unsigned acquisition_intervals = 3;
+
+    // The last time a period candidate matched (used to occasionally reset reference slope)
     uint32_t last_accepted_us = time_us_32();
-
-    float latest_freq_hz = 0.0f;
-    bool freq_updated = false;
-
+    // Default configuration allows four periods at lowest supported frequency
+    // Ex: Four 40 Hz periods is 0.1 seconds or 100,000 us
+    // Length of time with no period candidate matches before reference slope is reset
+    constexpr uint32_t estimator_timeout_us = static_cast<uint32_t>((4.0f / min_frequency_hz) * 1'000'000.0f);
 
     // Variables for regularly printing status updates
     uint32_t last_print_us = time_us_32();
     constexpr uint32_t print_interval_us = 500'000; // 2 Hz
     CrossingEvent debug_crossing{0,0};
+    bool freq_updated = false;
 
     // Latest statistics from the ADC ISR
     ADCBlockStats latest_adc_stats{};
     // Flag to initialize latest ADC statistics struct
     bool have_adc_stats = false;
 
-    // Current input handler state
-    InputState input_state = InputState::Idle;
-
     // Lambda function that resets local estimator variables by reference
     auto reset_estimator = [&]()
     {
-        period_state = PeriodState::Acquiring;
+        estimator_state = EstimatorState::Acquiring;
 
         have_reference = false;
         ref_slope = 0.0f;
@@ -93,6 +92,7 @@ int main()
         freq_updated = false;
     };
 
+    /* Main while loop */
     while (true) 
     {
         // Continuously drain the midpoint crossing event queue and process events
@@ -106,11 +106,11 @@ int main()
                 input_state = event.state;
                 // Reset the frequency estimator
                 reset_estimator();
-                // Process next event
+                // Process next event (no crossing event to handle)
                 continue;
             }
 
-            // If the input is not active, don't process other events
+            // If the input is not active, don't process crossing events
             if (input_state != InputState::Active)
             {
                 continue;
@@ -166,7 +166,7 @@ int main()
 
             /* Acquire a new period to track, or validate against an existing period */
             // Check if period estimator is currently acquiring a period to track
-            if (period_state == PeriodState::Acquiring)
+            if (estimator_state == EstimatorState::Acquiring)
             {
                 // Evaluate if the current candidate's period resembles existing candidates
                 const bool agrees_with_candidates =
@@ -199,6 +199,10 @@ int main()
                 // Check if current candidate period does not resemble tracked period
                 if (std::fabs(candidate_period_samples - mean_period_samples) > allowed_period_diff)
                 {
+                    // TODO: if candidate period larger than mean period, skip this candidate (potential tracking recovery)
+                    // set prev_match? but don't update last accepted?
+                    // Current logic resets to acquisition after one failed period candidate?
+
                     // Reject crossing as mark of new period; do not update prev_match
                     // A later crossing may form the correct full period
                     continue;
@@ -209,19 +213,19 @@ int main()
                 mean_period_samples += period_alpha * (candidate_period_samples - mean_period_samples);
             }
 
-            // This event was accepted as the potential start of a period so:
+            // This event was accepted as the start of a period so:
             prev_match = crossing;              // Track it for later period estimation
             last_accepted_us = time_us_32();    // Prevent reference slope from resetting
 
             // Once enough period candidates matched during acquisition, switch to tracking mode
-            if (period_state == PeriodState::Acquiring)
+            if (estimator_state == EstimatorState::Acquiring)
             {
                 if (consistent_intervals < acquisition_intervals)
                 {
                     continue;
                 }
 
-                period_state = PeriodState::Tracking;
+                estimator_state = EstimatorState::Tracking;
             }
 
             // Only adjust reference slope once tracking has begun (reliable period found)
@@ -270,7 +274,7 @@ int main()
 
             if (input_state == InputState::Active)
             {
-                if (period_state == PeriodState::Acquiring)
+                if (estimator_state == EstimatorState::Acquiring)
                 {
                     DEBUG_PRINT("Acquiring: %u/%u consistent intervals\n", consistent_intervals, acquisition_intervals);
                 }

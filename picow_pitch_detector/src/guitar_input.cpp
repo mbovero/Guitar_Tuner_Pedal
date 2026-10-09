@@ -124,14 +124,15 @@ static void record_adc_sample(uint16_t sample)
  */
 static void guitar_input_isr()
 {
-    // Initialize sample count for midpoint crossing timestamping
+    // The number of ADC samples taken (used for midpoint crossing timestamping)
     static uint32_t sample_count = 0;
-    // Initialize previous sample to 0
+    // Variable to store previous ADC sample value (used to detect midpoint crossings)
     static int16_t prev_sample = 0;
     // Boolean indicating that there is an up-to-date previous sample
     static bool have_prev = false;
-    // Boolean indicating the signal reached the hysteresis arming threshold, so the next midpoint crossing should be recorded
+    // Boolean indicating that the input reached the hysteresis arming threshold, so the next midpoint crossing should be recorded
     static bool crossing_armed = false;
+
     // While the FIFO buffer has samples, process them
     while (!adc_fifo_is_empty())
     {
@@ -240,7 +241,7 @@ static void guitar_input_isr()
 
 
 /*
- * Initializes the midpoint crossing event queue then configures the ADC into free-running sampling 
+ * Initializes the input event and stats queues then configures the ADC into free-running sampling 
  * mode to continuously read the guitar input signal, save conversions into an 8 sample FIFO buffer, 
  * and trigger an interrupt that is handled by guitar_in_isr() each time a new sample is recorded.
  */
@@ -288,7 +289,7 @@ void initialize_guitar_input()
 }
 
 /*
- * Non-blocking removal of the oldest midpoint crossing event queue entry if non empty.
+ * Non-blocking removal of the oldest input handler event queue entry if non empty.
  * If non empty, returns true and copies the removed entry into the provided location.
  * Otherwise, returns false.
 */
