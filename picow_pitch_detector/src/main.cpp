@@ -157,9 +157,17 @@ int main()
             // Backtrack from each crossing's positive ADC value to calculate precise total elapsed ADC samples
             const float candidate_period_samples = static_cast<float>(whole_samples) + prev_backtrack - current_backtrack;
 
-            // Reject periods outside the supported frequency range
-            if (candidate_period_samples < min_period_samples ||
-                candidate_period_samples > max_period_samples)
+            // Always reject non-positive periods
+            if (candidate_period_samples <= 0.0f)
+            {
+                continue;
+            }
+
+            // Reject periods outside the supported frequency range during Acquisition
+            // During tracking, allow more periods through for potential recovery
+            if (estimator_state == EstimatorState::Acquiring &&
+                (candidate_period_samples < min_period_samples ||
+                candidate_period_samples > max_period_samples))
             {
                 continue;
             }
@@ -199,17 +207,39 @@ int main()
                 // Check if current candidate period does not resemble tracked period
                 if (std::fabs(candidate_period_samples - mean_period_samples) > allowed_period_diff)
                 {
-                    // TODO: if candidate period larger than mean period, skip this candidate (potential tracking recovery)
-                    // set prev_match? but don't update last accepted?
-                    // Current logic resets to acquisition after one failed period candidate?
+                    /* Attempt recovery of period tracking */
+                    // Estimate how many cycles this candidate period spans
+                    const float cycles = std::round(candidate_period_samples / mean_period_samples);
+
+                    // Check if the candidate period seems to be a multiple of the tracked period (2x or 3x)
+                    if (cycles >= 2.0f &&
+                        cycles <= 3.0f &&
+                        std::fabs(candidate_period_samples - cycles * mean_period_samples) <= allowed_period_diff)
+                    {
+                        // Reset previous match marker to allow for potential recovery of period tracking
+                        prev_match = crossing;
+
+                        // Do not update the following due to unreliable data:
+                        // - last_accepted_us
+                        // - mean_period_samples
+                        // - ref_slope
+                        // - latest_freq_hz
+                        // - freq_updated
+                    }
 
                     // Reject crossing as mark of new period; do not update prev_match
-                    // A later crossing may form the correct full period
+                    // A later crossing may form the correct full period, or timeout will eventually occur
                     continue;
                 }
 
-                // Otherwise, current candidate period does resemble tracked period,
-                // so update the estimated period gradually (helps combat noise and transients)
+                // Otherwise, current candidate period accurately resembles tracked period
+                // Keep tracked period inside allowed frequency range
+                if (candidate_period_samples < min_period_samples ||
+                    candidate_period_samples > max_period_samples)
+                {
+                    continue;
+                }
+                // And update the estimated period gradually (helps combat noise and transients)
                 mean_period_samples += period_alpha * (candidate_period_samples - mean_period_samples);
             }
 
