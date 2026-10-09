@@ -133,6 +133,15 @@ static void guitar_input_isr()
     // Boolean indicating that the input reached the hysteresis arming threshold, so the next midpoint crossing should be recorded
     static bool crossing_armed = false;
 
+    // The pulse whose rising edge has been identified
+    static CrossingEvent pending_pulse;
+    // Whether a pulse is actively being measured
+    static bool collecting_pulse = false;
+    // Timestamp for a downward slope crossing for pulse analysis (counted in ADC samples)
+    static uint32_t falling_sample_count = 0;
+    // Flag indicating that a falling crossing has been acquired for the current pulse
+    static bool have_falling = false;
+
     // While the FIFO buffer has samples, process them
     while (!adc_fifo_is_empty())
     {
@@ -150,6 +159,9 @@ static void guitar_input_isr()
             crossing_armed = false;
             // Reset ADC block statistics
             current_adc_block = {4095, 0, 0, 0};
+            // Reset pulse tracking
+            collecting_pulse = false;
+            have_falling = false;
 
             // TODO: notify frequency estimator of discontinuity
             ++adc_error_count;
@@ -171,7 +183,9 @@ static void guitar_input_isr()
             have_prev = false;
             // Disarm (reset hysteresis state)
             crossing_armed = false;
-
+            // Reset pulse tracking
+            collecting_pulse = false;
+            have_falling = false;
 
             // Format a state change event
             const InputEvent event
@@ -193,41 +207,89 @@ static void guitar_input_isr()
         // Remove the VBIAS offset from the sample to center it around 0
         sample -= midpoint;
 
-        // Check if hysteresis threshold reached
-        if (state == InputState::Active &&
-            sample <= -crossing_hysteresis)
+        // When input is active
+        if (state == InputState::Active)
         {
-            // Accept the next midpoint crossing
-            crossing_armed = true;
-        }
-        
-        // Check if a midpoint crossing should be recorded
-        if (state == InputState::Active &&      // If there is an active input,
-            crossing_armed &&                   // input is armed to accept a new crossing (hysteresis),
-            have_prev &&                        // there is a previous sample to compare to,
-            (prev_sample < 0 && sample >= 0))   // and this is a midpoint crossing:
-        {
-            // Create a midpoint crossing event
-            const InputEvent event
+            /* Update or finish pulse currently being collected */
+            if (collecting_pulse)
             {
-                InputEventType::Crossing,
-                state,
+                // Track largest positive sample (pulse height)
+                if (sample > 0)
                 {
-                    sample_count,           // Store the current sample count as a timestamp
-                    (sample - prev_sample), // Store the approximate slope at this timestamp
-                    sample                  // Store the sample after the crossing for interpolation
+                    pending_pulse.pulse_height = std::max(
+                        pending_pulse.pulse_height, 
+                        static_cast<uint16_t>(sample));
                 }
-            };
-            
-            // Try to push it to the event queue to be processed
-            if (!queue_try_add(&input_event_queue, &event))
-            {
-                // TODO: queue is full, record error and/or signal to pitch estimator
-                ++queue_error_count;
+
+                // Record falling midpoint crossing
+                if (have_prev &&
+                    prev_sample >= 0 &&
+                    sample < 0)
+                {
+                    falling_sample_count = sample_count;
+                    have_falling = true;
+                }
+
+                // If input signal returns to positive side, invalidate falling midpoint crossing
+                if (sample > 0)
+                {
+                    have_falling = false;
+                }
+
+                // Once signal falls below hysteresis threshold, stored falling crossing is confirmed
+                if (have_falling &&
+                    sample <= -crossing_hysteresis)
+                {
+                    // Calculate pulse width (falling crossing timestamp - rising crossing timestamp)
+                    pending_pulse.pulse_width = falling_sample_count - pending_pulse.sample_count;
+
+                    // Require a peak that rises above a positive hysteresis threshold
+                    if (pending_pulse.pulse_height >= crossing_hysteresis &&
+                        pending_pulse.pulse_width > 0)
+                    {
+                        // Create midpoint crossing event with confirmed pulse data
+                        InputEvent event{};
+                        event.type = InputEventType::Crossing;
+                        event.state = state;
+                        event.crossing = pending_pulse;
+
+                        if (queue_try_add(&input_event_queue, &event))
+                        {
+                            ++queue_error_count;
+                        }
+                    }
+
+                    // Pulse collection complete, reset variables
+                    collecting_pulse = false;
+                    have_falling = false;
+                }
             }
 
-            // Disarm to prevent noise from triggering unwanted crossings
-            crossing_armed = false;
+            /* Arm detection for next rising crossing (hysteresis) */
+            if (sample <= -crossing_hysteresis)
+            {
+                crossing_armed = true;
+            }
+
+            /* Begin measuring newly detected positive pulse */
+            if(crossing_armed &&
+                have_prev &&
+                prev_sample < 0 &&
+                sample >= 0)
+            {
+                // Create new crossing event and store crossing data
+                pending_pulse = {};
+                pending_pulse.sample_count = sample_count;
+                pending_pulse.slope = sample - prev_sample;
+                pending_pulse.sample_after = sample;
+                // Initialize pulse height for later comparison/updating
+                pending_pulse.pulse_height = static_cast<uint16_t>(sample);
+                // Update pulse tracking flags
+                collecting_pulse = true;
+                have_falling = false;
+                // Reset hysteresis arming
+                crossing_armed = false;
+            }
         }
 
         // Increment the sample count

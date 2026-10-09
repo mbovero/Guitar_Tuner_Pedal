@@ -38,6 +38,23 @@ int main()
     // Smoothing factor applied to accepted measurements to update slope estimate
     constexpr float slope_alpha = 0.1f;
 
+    // Reference pulse height to identify beginning/end of waveform period
+    float ref_height = 0.0f;
+    // How much a compared pulse height can vary from reference height and still be considered matching
+    constexpr float height_noise_allowance = 20.0f; // Measured in ADC values
+    constexpr float height_relative_allowance = 0.35f;
+    // Reference pulse width to identify beginning/end of waveform period
+    float ref_width = 0.0f;
+    // How much a compared pulse width can vary from reference width and still be considered matching
+    constexpr float width_noise_allowance = 2.0f;   // Measured in ADC samples
+    constexpr float width_relative_allowance = 0.2f;
+    // Smoothing factor applied to accepted measurements to update pulse height or width estimate
+    constexpr float pulse_feature_alpha = 0.2f;
+
+    // Debug toggles for slope matching and/or pulse matching
+    constexpr bool use_pulse_matching = true;
+    constexpr bool use_slope_matching = true;
+
     // The latest accepted crossing event (used to estimate period)
     CrossingEvent prev_match{};
 
@@ -63,7 +80,7 @@ int main()
     // Default configuration allows four periods at lowest supported frequency
     // Ex: Four 40 Hz periods is 0.1 seconds or 100,000 us
     // Length of time with no period candidate matches before reference slope is reset
-    constexpr uint32_t estimator_timeout_us = static_cast<uint32_t>((4.0f / min_frequency_hz) * 1'000'000.0f);
+    constexpr uint32_t estimator_timeout_us = static_cast<uint32_t>((8.0f / min_frequency_hz) * 1'000'000.0f);
 
     // Variables for regularly printing status updates
     uint32_t last_print_us = time_us_32();
@@ -83,6 +100,8 @@ int main()
 
         have_reference = false;
         ref_slope = 0.0f;
+        ref_height = 0.0f;
+        ref_width = 0.0f;
         prev_match = {};
 
         consistent_intervals = 0;
@@ -121,11 +140,25 @@ int main()
             const CrossingEvent& crossing = event.crossing;
             // Copy of the crossing event for debug prints
             debug_crossing = crossing;
+            // Extract event information
+            const float new_slope = static_cast<float>(crossing.slope);
+            const float new_height = static_cast<float>(crossing.pulse_height);
+            const float new_width = static_cast<float>(crossing.pulse_width);
+
+            // Only process complete, valid positive-pulse records
+            if (crossing.slope <= 0 ||
+                crossing.pulse_height == 0 ||
+                crossing.pulse_width == 0)
+            {
+                continue;
+            }
 
             // Set a reference slope if a valid one does not exist
             if (!have_reference)
             {
-                ref_slope = static_cast<float>(crossing.slope);
+                ref_slope = new_slope;
+                ref_height = new_height;
+                ref_width = new_width;
                 prev_match = crossing;
 
                 last_accepted_us = time_us_32();
@@ -136,13 +169,25 @@ int main()
             }
 
 
-            /* Does the slope at this crossing resemble the reference slope? */
-            // Retrieve this crossing event's slope
-            const float new_slope = static_cast<float>(crossing.slope);
-            // Calculate the allowed difference from the reference slope
+            /* Does current slope and/or pulse resemble previous ones? */
+            // Calculate the allowed differences
             const float allowed_slope_diff = slope_noise_allowance + slope_relative_allowance * std::fabs(ref_slope);
+            const float allowed_height_diff = height_noise_allowance + height_relative_allowance * ref_height;
+            const float allowed_width_diff = width_noise_allowance + width_relative_allowance * ref_width;
+            // Determine which features match
+            const bool slope_matches = std::fabs(new_slope - ref_slope) <= allowed_slope_diff;
+            const bool height_matches = std::fabs(new_height - ref_height) <= allowed_height_diff;
+            const bool width_matches = std::fabs(new_width - ref_width) <= allowed_width_diff;
+
+            // Togglable slope or pulse comparisons implemented here
             // If current slope does not resemble the reference, it is not a new period; process next event
-            if (std::fabs(new_slope - ref_slope) > allowed_slope_diff)
+            if (use_slope_matching && !slope_matches)
+            {
+                continue;
+            }
+            // If current pulse does not resembled the reference, it is not a new period; process next event
+            if (use_pulse_matching &&
+                !height_matches || !width_matches)
             {
                 continue;
             }
@@ -258,8 +303,10 @@ int main()
                 estimator_state = EstimatorState::Tracking;
             }
 
-            // Only adjust reference slope once tracking has begun (reliable period found)
+            // Only adjust references once tracking has begun (a reliable period was found)
             ref_slope += slope_alpha * (new_slope - ref_slope);
+            ref_height += pulse_feature_alpha * (new_height - ref_height);
+            ref_width += pulse_feature_alpha * (new_width - ref_width);
 
             // Convert the tracked, averaged period into frequency
             latest_freq_hz = sample_rate_hz / mean_period_samples;
@@ -315,6 +362,12 @@ int main()
                     DEBUG_PRINT("Reference Slope: %.2f, Latest Slope: %d \n", ref_slope, debug_crossing.slope);
                     freq_updated = false;
                 }
+
+                // Always print pulse data when input is active
+                DEBUG_PRINT("Reference Height: %.2f, Latest Height: %u \n", ref_height, debug_crossing.pulse_height);
+                DEBUG_PRINT("Reference Width: %.3f ms, Latest Width: %.3f ms \n",
+                    1000.0f * ref_width / sample_rate_hz,
+                    1000.0f * debug_crossing.pulse_width / sample_rate_hz);
             }
 
             if (have_adc_stats)
