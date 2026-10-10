@@ -28,45 +28,45 @@ set(PICO_BOARD pico_w CACHE STRING "Board type")
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
-project(picow_pitch_detector C CXX ASM)
+project(picow_tuner_firmware C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(picow_pitch_detector 
+add_executable(picow_tuner_firmware 
     src/main.cpp 
     src/adc_input_handler.cpp
     src/tuning_feedback.cpp
 )
 
-target_compile_definitions(picow_pitch_detector PRIVATE
+target_compile_definitions(picow_tuner_firmware PRIVATE
     TUNER_DEBUG=1
 )
 
-pico_set_program_name(picow_pitch_detector "picow_pitch_detector")
-pico_set_program_version(picow_pitch_detector "0.1")
+pico_set_program_name(picow_tuner_firmware "picow_tuner_firmware")
+pico_set_program_version(picow_tuner_firmware "0.1")
 
 # Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(picow_pitch_detector 0)
-pico_enable_stdio_usb(picow_pitch_detector 1)
+pico_enable_stdio_uart(picow_tuner_firmware 0)
+pico_enable_stdio_usb(picow_tuner_firmware 1)
 
 # Add the standard library to the build
-target_link_libraries(picow_pitch_detector
+target_link_libraries(picow_tuner_firmware
         pico_stdlib)
 
 # Add the standard include files to the build
-target_include_directories(picow_pitch_detector PRIVATE
+target_include_directories(picow_tuner_firmware PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/src
 )
 
 # Add any user requested libraries
-target_link_libraries(picow_pitch_detector 
+target_link_libraries(picow_tuner_firmware 
         hardware_spi
         hardware_dma
         hardware_adc
         )
 
-pico_add_extra_outputs(picow_pitch_detector)
+pico_add_extra_outputs(picow_tuner_firmware)
 
