@@ -1,5 +1,4 @@
-#include "guitar_input.hpp"
-
+#include "adc_input_handler.hpp"
 #include "hardware/adc.h"
 #include "hardware/irq.h"
 #include "pico/util/queue.h"
@@ -56,7 +55,7 @@ static int32_t queue_error_count = 0;
  * and a new block is started.
  * Also performs state updates and midpoint adjustments after each block.
  */
-static void record_adc_sample(uint16_t sample)
+static void process_adc_sample(uint16_t sample)
 {
     // Update statistics with provided sample
     current_adc_block.min = std::min(current_adc_block.min, sample);
@@ -134,7 +133,7 @@ static void guitar_input_isr()
     static bool crossing_armed = false;
 
     // The pulse whose rising edge has been identified
-    static CrossingEvent pending_pulse;
+    static WaveformEvent pending_pulse;
     // Whether a pulse is actively being measured
     static bool collecting_pulse = false;
     // Timestamp for a downward slope crossing for pulse analysis (counted in ADC samples)
@@ -174,7 +173,7 @@ static void guitar_input_isr()
         // Store previous state before updating it
         const InputState prev_state = state;
         // Update ADC block statistics
-        record_adc_sample(usample);
+        process_adc_sample(usample);
 
         // Handle state changes
         if (state != prev_state)

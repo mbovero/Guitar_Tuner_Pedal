@@ -1,6 +1,5 @@
 #pragma once
 
-#include "crossing_history.hpp"
 #include <cstdint>
 
 // ADC target sampling rate
@@ -11,6 +10,20 @@ enum class InputEventType
 {
     Crossing,
     StateChanged
+};
+
+/*
+ * Data structure to hold a "timestamp" of a rising midpoint crossing, the slope at this point, 
+ * and associated pulse data
+ */
+struct WaveformEvent 
+{
+    uint32_t sample_count;  // The number of ADC conversions performed before this rising crossing
+    int32_t slope;          // Note: Should be positive for proper program execution
+    int16_t sample_after;   // The centered ADC sample right after this rising crossing; used for interpolation
+
+    uint16_t pulse_height;  // Height of peak above midpoint measured in ADC values
+    uint32_t pulse_width;   // Rising to falling width of the pulse measured in # of ADC samples
 };
 
 // Possible states of the tuner pedal's input
@@ -25,7 +38,7 @@ struct InputEvent
 {
     InputEventType type;
     InputState state;
-    CrossingEvent crossing{}; // Only used for Crossing message types
+    WaveformEvent crossing{}; // Only used for Crossing message types
 };
 
 // Data structure to hold accumulated statistics gathered across a block of ADC samples

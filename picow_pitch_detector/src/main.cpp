@@ -1,11 +1,10 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
-#include "guitar_input.hpp"
-#include "crossing_history.hpp"
+#include "adc_input_handler.hpp"
 #include "debug.hpp"
 #include <cstdlib>
 #include <cmath>
-#include "note_tracker.hpp"
+#include "tuning_feedback.hpp"
 
 // State of the period estimator
 enum class EstimatorState
@@ -57,7 +56,7 @@ int main()
     constexpr bool use_slope_matching = true;
 
     // The latest accepted crossing event (used to estimate period)
-    CrossingEvent prev_match{};
+    WaveformEvent prev_match{};
 
     // Running average of acquired/tracked periods in terms of # of ADC samples
     float mean_period_samples = 0.0f;
@@ -86,7 +85,7 @@ int main()
     // Variables for regularly printing status updates
     uint32_t last_print_us = time_us_32();
     constexpr uint32_t print_interval_us = 500'000; // 2 Hz
-    CrossingEvent debug_crossing{0,0};
+    WaveformEvent debug_crossing{0,0};
     bool freq_updated = false;
 
     // Latest statistics from the ADC ISR
@@ -95,12 +94,12 @@ int main()
     bool have_adc_stats = false;
 
     // Create tuning feedback config
-    const NoteConfig note_config {
+    const TuningConfig note_config {
         440.0f, // Modern standard pitch (A4 = 440 Hz)
         3.0f    // +/- range from target pitch that is considered "In Tune"
     };
     // Most recent tuning feedback
-    NoteResult latest_note{};
+    TuningResult latest_note{};
 
     // Lambda function that resets local estimator variables by reference
     auto reset_estimator = [&]()
@@ -148,7 +147,7 @@ int main()
 
 
             // Otherwise, handle event as a crossing event
-            const CrossingEvent& crossing = event.crossing;
+            const WaveformEvent& crossing = event.crossing;
             // Copy of the crossing event for debug prints
             debug_crossing = crossing;
             // Extract event information

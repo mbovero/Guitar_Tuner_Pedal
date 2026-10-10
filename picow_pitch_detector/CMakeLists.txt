@@ -37,9 +37,8 @@ pico_sdk_init()
 
 add_executable(picow_pitch_detector 
     src/main.cpp 
-    src/guitar_input.cpp
-    src/crossing_history.cpp
-    src/note_tracker.cpp
+    src/adc_input_handler.cpp
+    src/tuning_feedback.cpp
 )
 
 target_compile_definitions(picow_pitch_detector PRIVATE

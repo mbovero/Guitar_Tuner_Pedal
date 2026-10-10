@@ -1,15 +1,15 @@
-#include "note_tracker.hpp"
+#include "tuning_feedback.hpp"
 #include <cmath>
 
 /*
  * Takes the provided frequency, determines the closest pitch, and calculates the error between the two in cents.
- * Stores tuning feedback alongside other detailed information in NoteResult struct and returns it.
+ * Stores tuning feedback alongside other detailed information in TuningResult struct and returns it.
  * Optional config parameter allows for configuration of standard pitch and "In Tune" range.
  */
-NoteResult analyze_frequency(float freq_hz, const NoteConfig& config)
+TuningResult analyze_frequency(float freq_hz, const TuningConfig& config)
 {
     // Default result
-    NoteResult result{};
+    TuningResult result{};
 
     // Return default result if provided frequency or config is invalid
     if (!std::isfinite(freq_hz) || freq_hz <= 0.0f ||

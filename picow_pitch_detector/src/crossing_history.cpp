@@ -5,7 +5,7 @@
  * Adds the provided event to the midpoint crossing event ring buffer.
  * If the buffer is at maximum capacity, a new push replaces the oldest event.
  */
-void CrossingHistory::push(const CrossingEvent& event)
+void CrossingHistory::push(const WaveformEvent& event)
 {
     // Store the pushed event in the next slot in the ring buffer
     events_[next_] = event;
@@ -38,7 +38,7 @@ size_t CrossingHistory::size() const
  * If the provided index is in range, the event at that index is copied into the given 
  * location and the function returns true. Otherwise, the function returns false.
  */
-bool CrossingHistory::try_get(size_t i, CrossingEvent& event) const
+bool CrossingHistory::try_get(size_t i, WaveformEvent& event) const
 {
     // Ensure requested index is inside existing range
     if (i >= count_)
