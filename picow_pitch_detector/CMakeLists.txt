@@ -39,6 +39,7 @@ add_executable(picow_pitch_detector
     src/main.cpp 
     src/guitar_input.cpp
     src/crossing_history.cpp
+    src/note_tracker.cpp
 )
 
 target_compile_definitions(picow_pitch_detector PRIVATE

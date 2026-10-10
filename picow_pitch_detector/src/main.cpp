@@ -5,6 +5,7 @@
 #include "debug.hpp"
 #include <cstdlib>
 #include <cmath>
+#include "note_tracker.hpp"
 
 // State of the period estimator
 enum class EstimatorState
@@ -22,11 +23,11 @@ int main()
     // The most recent estimated frequency
     float latest_freq_hz = 0.0f;
     // Supported frequency range in Hz
-    constexpr float min_frequency_hz = 40.0f;
-    constexpr float max_frequency_hz = 1500.0f;
+    constexpr float min_freq_hz = 40.0f;
+    constexpr float max_freq_hz = 1500.0f;
     // Supported frequency range in terms of ADC samples
-    constexpr float min_period_samples = sample_rate_hz / max_frequency_hz;
-    constexpr float max_period_samples = sample_rate_hz / min_frequency_hz;
+    constexpr float min_period_samples = sample_rate_hz / max_freq_hz;
+    constexpr float max_period_samples = sample_rate_hz / min_freq_hz;
 
     // Reference slope used to identify beginning/end of waveform period
     float ref_slope = 0.0f;
@@ -80,7 +81,7 @@ int main()
     // Default configuration allows four periods at lowest supported frequency
     // Ex: Four 40 Hz periods is 0.1 seconds or 100,000 us
     // Length of time with no period candidate matches before reference slope is reset
-    constexpr uint32_t estimator_timeout_us = static_cast<uint32_t>((8.0f / min_frequency_hz) * 1'000'000.0f);
+    constexpr uint32_t estimator_timeout_us = static_cast<uint32_t>((8.0f / min_freq_hz) * 1'000'000.0f);
 
     // Variables for regularly printing status updates
     uint32_t last_print_us = time_us_32();
@@ -92,6 +93,14 @@ int main()
     ADCBlockStats latest_adc_stats{};
     // Flag to initialize latest ADC statistics struct
     bool have_adc_stats = false;
+
+    // Create tuning feedback config
+    const NoteConfig note_config {
+        440.0f, // Modern standard pitch (A4 = 440 Hz)
+        3.0f    // +/- range from target pitch that is considered "In Tune"
+    };
+    // Most recent tuning feedback
+    NoteResult latest_note{};
 
     // Lambda function that resets local estimator variables by reference
     auto reset_estimator = [&]()
@@ -109,6 +118,8 @@ int main()
 
         latest_freq_hz = 0.0f;
         freq_updated = false;
+
+        latest_note = {};
     };
 
     /* Main while loop */
@@ -310,6 +321,8 @@ int main()
 
             // Convert the tracked, averaged period into frequency
             latest_freq_hz = sample_rate_hz / mean_period_samples;
+            // Get tuning feedback based on latest frequency
+            latest_note = analyze_frequency(latest_freq_hz, note_config);
             // Allow updated frequency estimation to be displayed
             freq_updated = true;
         }
@@ -357,28 +370,42 @@ int main()
                 }
                 else if (freq_updated)
                 {
-                    DEBUG_PRINT("Estimated Frequency: %.3f Hz \n", latest_freq_hz);
-                    DEBUG_PRINT("Mean Period: %.3f samples \n", mean_period_samples);
-                    DEBUG_PRINT("Reference Slope: %.2f, Latest Slope: %d \n", ref_slope, debug_crossing.slope);
+                    // Tuning feedback
+                    if (latest_note.valid)
+                    {
+                        DEBUG_PRINT("Note: %s%d \n", latest_note.note_name, latest_note.octave);
+                        DEBUG_PRINT("Measured: %.2f Hz, Target: %.2f Hz \n", 
+                            latest_note.measured_freq_hz, latest_note.target_freq_hz);
+                        DEBUG_PRINT("Error: %+.1f cents \n", latest_note.cents_error);
+                        DEBUG_PRINT("Status: %s \n", tuning_status_text(latest_note.status));
+                    }
+                    else
+                    {
+                        DEBUG_PRINT("No valid note estimation \n");
+                    }
+
+                    // Detailed period estimation statistics
+                    // DEBUG_PRINT("Estimated Frequency: %.3f Hz \n", latest_freq_hz);
+                    // DEBUG_PRINT("Mean Period: %.3f samples \n", mean_period_samples);
+                    // DEBUG_PRINT("Reference Slope: %.2f, Latest Slope: %d \n", ref_slope, debug_crossing.slope);
+                    // DEBUG_PRINT("Reference Height: %.2f, Latest Height: %u \n", ref_height, debug_crossing.pulse_height);
+                    // DEBUG_PRINT("Reference Width: %.3f ms, Latest Width: %.3f ms \n",
+                    //     1000.0f * ref_width / sample_rate_hz,
+                    //     1000.0f * debug_crossing.pulse_width / sample_rate_hz);
+
                     freq_updated = false;
                 }
-
-                // Always print pulse data when input is active
-                DEBUG_PRINT("Reference Height: %.2f, Latest Height: %u \n", ref_height, debug_crossing.pulse_height);
-                DEBUG_PRINT("Reference Width: %.3f ms, Latest Width: %.3f ms \n",
-                    1000.0f * ref_width / sample_rate_hz,
-                    1000.0f * debug_crossing.pulse_width / sample_rate_hz);
             }
 
             if (have_adc_stats)
             {
-                DEBUG_PRINT("ADC: P2P=%u, mean=%.2f, min=%d, max=%d \n",
-                latest_adc_stats.p2p,
-                latest_adc_stats.mean,
-                latest_adc_stats.min,
-                latest_adc_stats.max);
+                // DEBUG_PRINT("ADC: P2P=%u, mean=%.2f, min=%d, max=%d \n",
+                // latest_adc_stats.p2p,
+                // latest_adc_stats.mean,
+                // latest_adc_stats.min,
+                // latest_adc_stats.max);
 
-                DEBUG_PRINT("Midpoint: %d \n", latest_adc_stats.midpoint);
+                // DEBUG_PRINT("Midpoint: %d \n", latest_adc_stats.midpoint);
                 // DEBUG_PRINT("ADC Errors: %d \n", latest_adc_stats.adc_errors);
                 // DEBUG_PRINT("Queue Errors: %d \n", latest_adc_stats.queue_errors);
             }
