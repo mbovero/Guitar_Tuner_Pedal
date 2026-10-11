@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cmath>
 #include "tuning_feedback.hpp"
+#include "hardware/adc.h"
 
 // State of the period estimator
 enum class EstimatorState
@@ -33,7 +34,7 @@ int main()
     // Whether a valid reference slope has been set; helps initialize/reset ref_slope
     bool have_reference = false;
     // How much a compared slope can vary from reference slope and still be considered matching
-    constexpr float slope_noise_allowance = 10.0f;
+    constexpr float slope_noise_allowance = 5.0f;
     constexpr float slope_relative_allowance = 0.1f;
     // Smoothing factor applied to accepted measurements to update slope estimate
     constexpr float slope_alpha = 0.1f;
@@ -41,15 +42,15 @@ int main()
     // Reference pulse height to identify beginning/end of waveform period
     float ref_height = 0.0f;
     // How much a compared pulse height can vary from reference height and still be considered matching
-    constexpr float height_noise_allowance = 20.0f; // Measured in ADC values
-    constexpr float height_relative_allowance = 0.35f;
+    constexpr float height_noise_allowance = 10.0f; // Measured in ADC values
+    constexpr float height_relative_allowance = 0.25f;
     // Reference pulse width to identify beginning/end of waveform period
     float ref_width = 0.0f;
     // How much a compared pulse width can vary from reference width and still be considered matching
-    constexpr float width_noise_allowance = 2.0f;   // Measured in ADC samples
-    constexpr float width_relative_allowance = 0.2f;
+    constexpr float width_noise_allowance = 4.0f;   // Measured in ADC samples
+    constexpr float width_relative_allowance = 0.1f;
     // Smoothing factor applied to accepted measurements to update pulse height or width estimate
-    constexpr float pulse_feature_alpha = 0.2f;
+    constexpr float pulse_feature_alpha = 0.1f;
 
     // Debug toggles for slope matching and/or pulse matching
     constexpr bool use_pulse_matching = true;
@@ -61,9 +62,9 @@ int main()
     // Running average of acquired/tracked periods in terms of # of ADC samples
     float mean_period_samples = 0.0f;
     // Tolerance allowed for matching candidate periods
-    constexpr float period_relative_allowance = 0.08f;
+    constexpr float period_relative_allowance = 0.01f;
     // Smoothing factor applied to accepted measurements to update period estimate
-    constexpr float period_alpha = 0.2f;
+    constexpr float period_alpha = 0.1f;
 
     // Current input handler state
     InputState input_state = InputState::Idle;
@@ -197,7 +198,7 @@ int main()
             }
             // If current pulse does not resembled the reference, it is not a new period; process next event
             if (use_pulse_matching &&
-                !height_matches || !width_matches)
+                (!height_matches || !width_matches))
             {
                 continue;
             }
@@ -320,8 +321,6 @@ int main()
 
             // Convert the tracked, averaged period into frequency
             latest_freq_hz = sample_rate_hz / mean_period_samples;
-            // Get tuning feedback based on latest frequency
-            latest_note = analyze_frequency(latest_freq_hz, note_config);
             // Allow updated frequency estimation to be displayed
             freq_updated = true;
         }
@@ -336,7 +335,7 @@ int main()
         }
 
 
-        // Get current time for upkeep tasks
+        // Get current time for estimator resets and debug printing
         const uint32_t now_us = time_us_32();
 
         // Reset the estimator if initialization has occurred and 
@@ -348,11 +347,12 @@ int main()
         }
 
 
-        // Regularly print status updates
+        // Regularly print debug updates
         if ((now_us - last_print_us) >= print_interval_us)
         {
             DEBUG_PRINT("\n");
-
+            
+            // Always print input state
             if (input_state == InputState::Active)
             {
                 DEBUG_PRINT("State: Active\n");
@@ -361,15 +361,20 @@ int main()
                 DEBUG_PRINT("State: Idle\n");
             }
 
+            // Only print frequency estimator and tuning feedback when input is active
             if (input_state == InputState::Active)
             {
+                // Print data during acquisition
                 if (estimator_state == EstimatorState::Acquiring)
                 {
                     DEBUG_PRINT("Acquiring: %u/%u consistent intervals\n", consistent_intervals, acquisition_intervals);
                 }
                 else if (freq_updated)
                 {
-                    // Tuning feedback
+                    // Get tuning feedback based on latest frequency
+                    latest_note = analyze_frequency(latest_freq_hz, note_config);
+
+                    // Print tuning feedback
                     if (latest_note.valid)
                     {
                         DEBUG_PRINT("Note: %s%d \n", latest_note.note_name, latest_note.octave);
@@ -396,6 +401,7 @@ int main()
                 }
             }
 
+            // Always print ADC stats if they are available
             if (have_adc_stats)
             {
                 // DEBUG_PRINT("ADC: P2P=%u, mean=%.2f, min=%d, max=%d \n",
@@ -404,9 +410,25 @@ int main()
                 // latest_adc_stats.min,
                 // latest_adc_stats.max);
 
-                // DEBUG_PRINT("Midpoint: %d \n", latest_adc_stats.midpoint);
+                // // Check if ADC FIFO has overflowed
+                // const bool fifo_overflowed =
+                //     (adc_hw->fcs & ADC_FCS_OVER_BITS) != 0;
+
+                // if (fifo_overflowed)
+                // {
+                //     // Write 1 to clear overflow, preserving FIFO configuration.
+                //     adc_hw->fcs |= ADC_FCS_OVER_BITS;
+                // }
+
+                // DEBUG_PRINT("FIFO overflow since last check: %d\n",
+                //             static_cast<int>(fifo_overflowed));
+
+                // // DEBUG_PRINT("Midpoint: %d \n", latest_adc_stats.midpoint);
                 // DEBUG_PRINT("ADC Errors: %d \n", latest_adc_stats.adc_errors);
-                // DEBUG_PRINT("Queue Errors: %d \n", latest_adc_stats.queue_errors);
+                // DEBUG_PRINT("WaveForm Errors: %d \n", latest_adc_stats.waveform_queue_errors);
+                // DEBUG_PRINT("StateChange Errors: %d \n", latest_adc_stats.state_change_queue_errors);
+                // DEBUG_PRINT("Stats Errors: %d \n", latest_adc_stats.stats_queue_errors);
+
             }
 
             last_print_us = now_us;
