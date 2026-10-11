@@ -29,6 +29,13 @@ void CustomEstimator::reset()
 
 }
 
+/*
+ * An attempt at a custom approach to frequency estimation. This estimator intakes waveform
+ * features (e.g. midpoint crossings and pulse width/height) and uses them to identify 
+ * signal periodicity. Once the estimator has acquired a few consistent periods, it begins
+ * tracking that frequency, gradually improving its output until the input signal changes.
+ * significantly. The period acquisition process then starts again. Rinse and repeat.
+ */
 bool CustomEstimator::process(const WaveformEvent& crossing, uint32_t now_us)
 {
     // Copy of the crossing event for debug prints

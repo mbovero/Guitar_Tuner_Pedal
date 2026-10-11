@@ -1,3 +1,11 @@
+/*
+ * The logic contained in this file is for input signal feature acquisition for a custom
+ * approach to frequency estimation. This ADC FIFO ISR watches the input signal and
+ * records midpoint crossings, positive pulse width/height, and other waveform statistics.
+ * Other functions defined here are for initializing the handler and determining whether the
+ * input is active or idle. This data is then passed to the custom estimator for processing.
+ */
+
 #include "custom_pulse_input.hpp"
 #include "hardware/adc.h"
 #include "hardware/irq.h"
@@ -125,10 +133,10 @@ static void process_adc_sample(uint16_t sample)
 
 /*
  * Interrupt service routine for handling ADC samples:
- * Watches ADC input for midpoint crossings and pushes their timestamps and slope to the 
- * event queue for further processing.
+ * Watches ADC input for waveform features and pushes their timestamps and 
+ * data to the event queue for further processing.
  */
-static void guitar_input_isr()
+static void custom_input_isr()
 {
     // The number of ADC samples taken (used for midpoint crossing timestamping)
     static uint32_t sample_count = 0;
@@ -313,7 +321,7 @@ static void guitar_input_isr()
  * mode to continuously read the guitar input signal, save conversions into an 8 sample FIFO buffer, 
  * and trigger an interrupt that is handled by guitar_in_isr() each time a new sample is recorded.
  */
-void initialize_guitar_input()
+void initialize_pulse_input()
 {
     // Initialize the midpoint crossing event queue
     queue_init(
@@ -355,7 +363,7 @@ void initialize_guitar_input()
 
 
     // Register custom interrupt service routine for handling ADC samples
-    irq_set_exclusive_handler(ADC_IRQ_FIFO, guitar_input_isr);
+    irq_set_exclusive_handler(ADC_IRQ_FIFO, custom_input_isr);
     // Enable ADC interrupts
     adc_irq_set_enabled(true);
     // Enable ADC FIFO interrupt on this core

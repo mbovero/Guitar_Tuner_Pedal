@@ -7,14 +7,23 @@
 
 #include "hardware/adc.h"
 
+/* 
+ * This is an attempt at implementing a custom frequency estimation algorithm. This tuner firmware 
+ * runs an ADC interrupt handler that provides a stream of waveform pulse and midpoint crossing
+ * data. The custom estimator then compares sequential waveform features to identify potential
+ * signal periods. Once a stable period has been identified, the estimator gradually improves
+ * its frequency estimation and outputs it. Finally, the estimated frequency is converted into
+ * tuning feedback and displayed to the user.
+ */
 int main()
 {
     stdio_init_all();
 
+    // Initialize custom frequency estimator instance
     CustomEstimator estimator{sample_rate_hz};
 
     // Set up the ADC to intake the guitar signal and queue midpoint crossing events
-    initialize_guitar_input();
+    initialize_pulse_input();
 
     // Current input handler state
     InputState input_state = InputState::Idle;

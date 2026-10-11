@@ -43,7 +43,7 @@ struct ADCBlockStats
     int32_t stats_queue_errors;
 };
 
-void initialize_guitar_input();
+void initialize_pulse_input();
 
 bool try_get_input_event(InputEvent& event);
 
