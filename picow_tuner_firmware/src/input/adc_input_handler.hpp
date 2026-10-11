@@ -2,8 +2,8 @@
 
 #include <cstdint>
 
-// ADC target sampling rate
-constexpr float sample_rate_hz = 256'000.0f;
+// ADC sampling rate
+constexpr float sample_rate_hz = 256'000.0f;    // TODO: remove?
 
 // Possible types of events from input handler
 enum class InputEventType
@@ -16,7 +16,7 @@ enum class InputEventType
  * Data structure to hold a "timestamp" of a rising midpoint crossing, the slope at this point, 
  * and associated pulse data
  */
-struct WaveformEvent 
+struct WaveformEvent // TODO: move to dedicated file?
 {
     uint32_t sample_count;  // The number of ADC conversions performed before this rising crossing
     int32_t slope;          // Note: Should be positive for proper program execution

@@ -37,8 +37,9 @@ pico_sdk_init()
 
 add_executable(picow_tuner_firmware 
     src/main.cpp 
-    src/adc_input_handler.cpp
-    src/tuning_feedback.cpp
+    src/input/adc_input_handler.cpp
+    src/tuning/tuning_feedback.cpp
+    src/pitch/custom_estimator.cpp
 )
 
 target_compile_definitions(picow_tuner_firmware PRIVATE
