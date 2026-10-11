@@ -3,7 +3,7 @@
 #include <cstdint>
 
 // ADC target sampling rate
-constexpr float sample_rate_hz = 128'000.0f;
+constexpr float sample_rate_hz = 256'000.0f;
 
 // Possible types of events from input handler
 enum class InputEventType
@@ -52,7 +52,9 @@ struct ADCBlockStats
     float mean;
     int16_t midpoint;
     int32_t adc_errors;
-    int32_t queue_errors;
+    int32_t waveform_queue_errors;
+    int32_t state_change_queue_errors;
+    int32_t stats_queue_errors;
 };
 
 void initialize_guitar_input();
