@@ -36,8 +36,8 @@ pico_sdk_init()
 # Add executable. Default name is the project name, version 0.1
 
 add_executable(picow_tuner_firmware 
-    src/main.cpp 
-    src/input/adc_input_handler.cpp
+    src/apps/custom_tuner.cpp 
+    src/input/custom_pulse_input.cpp
     src/tuning/tuning_feedback.cpp
     src/pitch/custom_estimator.cpp
 )

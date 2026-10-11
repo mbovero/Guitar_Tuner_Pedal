@@ -1,4 +1,4 @@
-#include "adc_input_handler.hpp"
+#include "custom_pulse_input.hpp"
 #include "hardware/adc.h"
 #include "hardware/irq.h"
 #include "pico/util/queue.h"

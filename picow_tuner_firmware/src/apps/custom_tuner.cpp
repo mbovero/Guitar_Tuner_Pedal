@@ -2,7 +2,7 @@
 #include "pico/stdlib.h"
 #include "tuning/tuning_feedback.hpp"
 #include "pitch/custom_estimator.hpp"
-#include "input/adc_input_handler.hpp"
+#include "input/custom_pulse_input.hpp"
 #include "debug.hpp"
 
 #include "hardware/adc.h"
