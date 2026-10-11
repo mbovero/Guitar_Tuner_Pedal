@@ -15,7 +15,7 @@ static queue_t adc_stats_queue;
 // ADC stats queue's maximum number of entries
 static constexpr unsigned adc_stats_queue_cap = 4;
 // Number of ADC samples taken per block
-static constexpr uint32_t adc_block_samples = 4096;
+static constexpr uint32_t adc_block_samples = 16'000;
 // Struct to track the statistics of the current ADC block
 static ADCBlockStats current_adc_block
 {
@@ -46,7 +46,9 @@ static constexpr int16_t crossing_hysteresis = 50;
 
 // Counts for errors
 static int32_t adc_error_count = 0;
-static int32_t queue_error_count = 0;
+static int32_t waveform_queue_errors = 0;
+static int32_t state_change_queue_errors = 0;
+static int32_t stats_queue_errors = 0;
 
 
 /*
@@ -106,10 +108,15 @@ static void process_adc_sample(uint16_t sample)
         current_adc_block.mean = mean;
         current_adc_block.midpoint = midpoint;
         current_adc_block.adc_errors = adc_error_count;
-        current_adc_block.queue_errors = queue_error_count;
+        current_adc_block.waveform_queue_errors = waveform_queue_errors;
+        current_adc_block.state_change_queue_errors = state_change_queue_errors;
+        current_adc_block.stats_queue_errors = stats_queue_errors;
 
         // Push statistics to queue; discard if queue is full
-        (void)queue_try_add(&adc_stats_queue, &current_adc_block);
+        if (!queue_try_add(&adc_stats_queue, &current_adc_block))
+        {
+            ++stats_queue_errors;
+        }
         // Reset current ADC block stats to begin new block
         current_adc_block = {4095, 0, 0, 0};
     }    
@@ -197,7 +204,7 @@ static void guitar_input_isr()
             if (!queue_try_add(&input_event_queue, &event))
             {
                 // TODO: robust queue full handling
-                ++queue_error_count;
+                ++state_change_queue_errors;
             }
         }
 
@@ -252,9 +259,9 @@ static void guitar_input_isr()
                         event.state = state;
                         event.crossing = pending_pulse;
 
-                        if (queue_try_add(&input_event_queue, &event))
+                        if (!queue_try_add(&input_event_queue, &event))
                         {
-                            ++queue_error_count;
+                            ++waveform_queue_errors;
                         }
                     }
 
@@ -336,7 +343,16 @@ void initialize_guitar_input()
     adc_fifo_setup(true, false, 1, true, false);
 
     // Set the ADC clock divisor to achieve the desired sampling rate
-    adc_set_clkdiv((48'000'000.0f / sample_rate_hz) - 1.0f);
+    // If ADC sampling rate set to maximum (500 KHz), divisor must be set differently
+    if (sample_rate_hz >= 500'000.0f)
+    {
+        adc_set_clkdiv(0.0f);
+    }
+    else    // Otherwise, do standard Hz to divisor conversion
+    {
+        adc_set_clkdiv((48'000'000.0f / sample_rate_hz) - 1.0f);
+    }
+
 
     // Register custom interrupt service routine for handling ADC samples
     irq_set_exclusive_handler(ADC_IRQ_FIFO, guitar_input_isr);
