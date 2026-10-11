@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "input/adc_input_handler.hpp" // TODO refactor so this isn't needed?
+#include "input/waveform_event.hpp"
 #include "pitch_result.hpp"
 
 // State of the pitch estimator

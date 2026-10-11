@@ -2,6 +2,7 @@
 #include "pico/stdlib.h"
 #include "tuning/tuning_feedback.hpp"
 #include "pitch/custom_estimator.hpp"
+#include "input/adc_input_handler.hpp"
 #include "debug.hpp"
 
 #include "hardware/adc.h"
@@ -129,7 +130,7 @@ int main()
                     // Get tuning feedback based on latest frequency
                     latest_note = analyze_frequency(pitch.freq_hz, note_config);
 
-                    // Print tuning feedback
+                    // Print valid tuning feedback
                     if (latest_note.valid)
                     {
                         DEBUG_PRINT("Note: %s%d \n", latest_note.note_name, latest_note.octave);
