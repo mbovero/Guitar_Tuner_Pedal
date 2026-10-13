@@ -7,6 +7,12 @@ YinEstimator::YinEstimator(float sampling_rate)
 {
 }
 
+/*
+ * Produces an estimate from the provided samples using the YIN algorithm.
+ * Returns a default, invalid result if the estimator config or provided samples are invalid.
+ * If successful, a result struct containing the estimated frequency and some related statistics 
+ * is returned.
+ */
 YinEstimate YinEstimator::estimate(const uint16_t* samples, size_t sample_count)
 {
     YinEstimate result{};
@@ -117,7 +123,7 @@ YinEstimate YinEstimator::estimate(const uint16_t* samples, size_t sample_count)
     size_t candidate = 0;
 
     // Traverse normalized difference data using valid period range in terms of lag
-    for (size_t lag = min_lag; lag < max_lag; ++lag)
+    for (size_t lag = min_lag; lag <= max_lag; ++lag)
     {
         // Find the first value below the threshold
         if (normalized_difference[lag] < threshold)

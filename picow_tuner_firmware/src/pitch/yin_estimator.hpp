@@ -18,6 +18,7 @@ struct YinEstimate
     float normalized_difference = 1.0f;
 };
 
+// Pitch estimator implemented using the YIN algorithm
 class YinEstimator
 {
 public:
@@ -43,8 +44,8 @@ private:
 
     /* These array sizes allow for index 0, supported lags 1 to max_supported_lags, 
     and an extra neighbor at the end for interpolation */
-    // TODO description
+    // YIN Difference Function d(tao)
     std::array<float, max_supported_lag + 2> difference_function{};
-    // TODO description
+    // YIN Normalized Difference Function d'(tao)
     std::array<float, max_supported_lag + 2> normalized_difference{};
 };
