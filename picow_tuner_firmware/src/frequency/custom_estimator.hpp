@@ -3,7 +3,7 @@
 #include <cstdint>
 
 #include "input/waveform_event.hpp"
-#include "pitch_result.hpp"
+#include "frequency_estimate.hpp"
 
 // State of the pitch estimator
 enum class CustomEstimatorState
@@ -28,7 +28,7 @@ public:
     bool update(uint32_t now_us);
 
     // Returns currently held frequency estimate
-    PitchResult result() const
+    FrequencyEstimate result() const
     {
         return latest_result;
     }
@@ -157,5 +157,5 @@ private:
     uint32_t last_accepted_us = 0;
 
     // The most recent frequency estimation and its validity
-    PitchResult latest_result{};
+    FrequencyEstimate latest_result{};
 };

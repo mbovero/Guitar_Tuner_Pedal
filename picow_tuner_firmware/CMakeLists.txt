@@ -38,11 +38,11 @@ pico_sdk_init()
 add_executable(picow_tuner_firmware 
     #src/apps/custom_tuner.cpp 
     src/input/custom_pulse_input.cpp
-    src/pitch/custom_estimator.cpp
+    src/frequency/custom_estimator.cpp
 
     src/apps/yin_tuner.cpp
     src/input/sample_buffer_input.cpp
-    src/pitch/yin_estimator.cpp
+    src/frequency/yin_estimator.cpp
 
     src/tuning/tuning_feedback.cpp
 

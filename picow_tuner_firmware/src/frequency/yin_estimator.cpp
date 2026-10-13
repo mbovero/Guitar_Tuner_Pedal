@@ -193,8 +193,8 @@ YinEstimate YinEstimator::estimate(const uint16_t* samples, size_t sample_count)
     }
 
     // Populate valid result
-    result.pitch.valid = true;
-    result.pitch.freq_hz = frequency;
+    result.frequency_estimate.valid = true;
+    result.frequency_estimate.freq_hz = frequency;
 
     result.period_samples = period;
     result.normalized_difference = normalized_difference[candidate];

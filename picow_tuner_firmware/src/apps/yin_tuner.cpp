@@ -7,7 +7,7 @@
 #include "pico/stdlib.h"
 
 #include "debug.hpp"
-#include "pitch/yin_estimator.hpp"
+#include "frequency/yin_estimator.hpp"
 #include "input/sample_buffer_input.hpp"
 #include "tuning/tuning_feedback.hpp"
 
@@ -24,12 +24,12 @@ int main()
     constexpr uint16_t minimum_signal_peak_to_peak = 200;
 
     // Create tuning feedback config
-    const TuningConfig note_config {
+    const TuningConfig tuning_config {
         440.0f, // Modern standard pitch (A4 = 440 Hz)
         3.0f    // +/- range from target pitch that is considered "In Tune"
     };
     // Most recent tuning feedback
-    TuningResult latest_note{};
+    TuningResult latest_feedback{};
 
 
     // Main while loop
@@ -81,7 +81,7 @@ int main()
         {
             DEBUG_PRINT("Input quiet \n");
         }
-        else if (!estimate.pitch.valid)
+        else if (!estimate.frequency_estimate.valid)
         {
             DEBUG_PRINT("No accepted pitch \n");
         }
@@ -90,22 +90,22 @@ int main()
             DEBUG_PRINT(
                 "Frequency: %.3f Hz, Period: %.4f samples, "
                 "Difference: %.6f, Processing: %lu us \n",
-                estimate.pitch.freq_hz,
+                estimate.frequency_estimate.freq_hz,
                 estimate.period_samples,
                 estimate.normalized_difference,
                 static_cast<unsigned long>(processing_time_us));
 
             // Get tuning feedback based on latest frequency
-            latest_note = analyze_frequency(estimate.pitch.freq_hz, note_config);
+            latest_feedback = analyze_frequency(estimate.frequency_estimate.freq_hz, tuning_config);
 
             // Print valid tuning feedback
-            if (latest_note.valid)
+            if (latest_feedback.valid)
             {
-                DEBUG_PRINT("Note: %s%d \n", latest_note.note_name, latest_note.octave);
+                DEBUG_PRINT("Note: %s%d \n", latest_feedback.note_name, latest_feedback.octave);
                 DEBUG_PRINT("Measured: %.2f Hz, Target: %.2f Hz \n", 
-                    latest_note.measured_freq_hz, latest_note.target_freq_hz);
-                DEBUG_PRINT("Error: %+.1f cents \n", latest_note.cents_error);
-                DEBUG_PRINT("Status: %s \n", tuning_status_text(latest_note.status));
+                    latest_feedback.measured_freq_hz, latest_feedback.target_freq_hz);
+                DEBUG_PRINT("Error: %+.1f cents \n", latest_feedback.cents_error);
+                DEBUG_PRINT("Status: %s \n", tuning_status_text(latest_feedback.status));
             }
             else
             {
@@ -113,7 +113,5 @@ int main()
             }
 
         }
-
-        sleep_ms(10);
     }
 }

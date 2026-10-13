@@ -4,13 +4,13 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "pitch_result.hpp"
+#include "frequency_estimate.hpp"
 
 // The estimated pitch from the YIN algorithm, alongside some related data
 struct YinEstimate
 {
     // The estimated frequency and its validity
-    PitchResult pitch{};
+    FrequencyEstimate frequency_estimate{};
 
     // The estimated number of samples per waveform cycle
     float period_samples = 0.0f;
@@ -37,7 +37,7 @@ private:
     static constexpr float min_frequency_hz = 40.0f;
     static constexpr float max_frequency_hz = 1500.0f;
 
-    static constexpr float threshold = 0.15f;
+    static constexpr float threshold = 0.10f;
 
     // ADC sampling rate set by constructor
     const float sample_rate_hz;

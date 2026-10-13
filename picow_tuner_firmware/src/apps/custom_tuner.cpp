@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "tuning/tuning_feedback.hpp"
-#include "pitch/custom_estimator.hpp"
+#include "frequency/custom_estimator.hpp"
 #include "input/custom_pulse_input.hpp"
 #include "debug.hpp"
 
@@ -134,7 +134,7 @@ int main()
                 else if (freq_updated)
                 {
                     // Retrieve latest frequency estimate
-                    const PitchResult pitch = estimator.result();
+                    const FrequencyEstimate pitch = estimator.result();
 
                     // Get tuning feedback based on latest frequency
                     latest_note = analyze_frequency(pitch.freq_hz, note_config);
