@@ -8,38 +8,8 @@
 
 #include "debug.hpp"
 #include "pitch/yin_estimator.hpp"
-
-// Number of test samples
-constexpr size_t test_sample_count = 1024;
-// ADC sampling rate
-constexpr float sample_rate_hz = 8000.0f;
-
-// Estimation of pi
-constexpr float pi = 3.14159265358979323846f;
-
-// Populates the provided samples array with a simualted sine wave with the provided frequency
-void generate_test_signal(std::array<uint16_t, test_sample_count>& samples, float frequency_hz)
-{
-    // Midpoint of 1.65 V
-    constexpr float midpoint = 2048.0f;
-    // Signal amplitude of ~0.146 V
-    constexpr float amplitude = 600.0f;
-
-    for (size_t i = 0; i < samples.size(); ++i)
-    {
-        // Convert ADC sample period into seconds
-        const float time_seconds = static_cast<float>(i) / sample_rate_hz;
-
-        // Calculate angle based on current time 
-        const float angle = 2.0f * pi * frequency_hz * time_seconds;
-
-        // Calculate waveform value using estimated angle
-        const float value = midpoint + amplitude*std::sin(angle);
-
-        // Round waveform value to simulate ADC sample
-        samples[i] = static_cast<uint16_t>(std::lround(value));
-    }
-}
+#include "input/sample_buffer_input.hpp"
+#include "tuning/tuning_feedback.hpp"
 
 int main()
 {
@@ -47,32 +17,103 @@ int main()
 
     sleep_ms(2000); // Time to connect to serial monitor
 
-    static std::array<uint16_t, test_sample_count> test_samples{};
+    initialize_sample_input();
 
-    static YinEstimator estimator{sample_rate_hz};
+    static YinEstimator estimator{SampleInputConfig::sample_rate_hz};
 
-    constexpr float test_frequency_hz = 100.0f;
-    generate_test_signal(test_samples, test_frequency_hz);
+    constexpr uint16_t minimum_signal_peak_to_peak = 200;
+
+    // Create tuning feedback config
+    const TuningConfig note_config {
+        440.0f, // Modern standard pitch (A4 = 440 Hz)
+        3.0f    // +/- range from target pitch that is considered "In Tune"
+    };
+    // Most recent tuning feedback
+    TuningResult latest_note{};
+
 
     // Main while loop
     while (true)
     {
-        const uint32_t start_us = time_us_32();
+        // Collect a frame of ADC samples
+        const SampleFrame& frame = capture_sample_frame();
 
-        const YinEstimate estimate = estimator.estimate(test_samples.data(), test_samples.size());
+        // Initialize default estimate
+        YinEstimate estimate{};
+        // Initialize total processing time
+        uint32_t processing_time_us = 0;
 
-        const uint32_t elapsed_us = time_us_32() - start_us;
+        // Determine if an input signal is present
+        const bool signal_present = frame.peak_to_peak_adc >= minimum_signal_peak_to_peak;
 
-        DEBUG_PRINT("Input %.3f Hz, Valid: %d, Estimate: %.3f Hz \n",
-            test_frequency_hz,
-            static_cast<int>(estimate.pitch.valid),
-            estimate.pitch.freq_hz);
+        // Check that the frame is valid and captured a useful input
+        if (frame.capture_valid && signal_present)
+        {
+            // Track YIN computation time
+            const uint32_t start_us = time_us_32();
+            // Perform estimation of signal frequency
+            estimate = estimator.estimate(
+                frame.samples.data(),
+                frame.samples.size());
+            // Calculate elapsed calculation time
+            processing_time_us = time_us_32() - start_us;
+        }
 
-        DEBUG_PRINT("Period: %.4f samples, Normalized Difference: %.6f, Processing: %lu us \n",
-            estimate.period_samples,
-            estimate.normalized_difference,
-            static_cast<unsigned long>(elapsed_us));
 
-        sleep_ms(1000);
+        // Print results/statistics
+        DEBUG_PRINT(
+            "\n ADC: min=%u max=%u p2p=%u mean=%.1f \n"
+            "capture=%lu us errors=%lu overflow=%d rails=%lu \n",
+            static_cast<unsigned>(frame.minimum_adc),
+            static_cast<unsigned>(frame.maximum_adc),
+            static_cast<unsigned>(frame.peak_to_peak_adc),
+            frame.mean_adc,
+            static_cast<unsigned long>(frame.capture_time_us),
+            static_cast<unsigned long>(frame.conversion_error_count),
+            static_cast<int>(frame.fifo_overflowed),
+            static_cast<unsigned long>(frame.near_rail_count));
+
+        if (!frame.capture_valid)
+        {
+            DEBUG_PRINT("Capture invalid \n");
+        }
+        else if (!signal_present)
+        {
+            DEBUG_PRINT("Input quiet \n");
+        }
+        else if (!estimate.pitch.valid)
+        {
+            DEBUG_PRINT("No accepted pitch \n");
+        }
+        else
+        {
+            DEBUG_PRINT(
+                "Frequency: %.3f Hz, Period: %.4f samples, "
+                "Difference: %.6f, Processing: %lu us \n",
+                estimate.pitch.freq_hz,
+                estimate.period_samples,
+                estimate.normalized_difference,
+                static_cast<unsigned long>(processing_time_us));
+
+            // Get tuning feedback based on latest frequency
+            latest_note = analyze_frequency(estimate.pitch.freq_hz, note_config);
+
+            // Print valid tuning feedback
+            if (latest_note.valid)
+            {
+                DEBUG_PRINT("Note: %s%d \n", latest_note.note_name, latest_note.octave);
+                DEBUG_PRINT("Measured: %.2f Hz, Target: %.2f Hz \n", 
+                    latest_note.measured_freq_hz, latest_note.target_freq_hz);
+                DEBUG_PRINT("Error: %+.1f cents \n", latest_note.cents_error);
+                DEBUG_PRINT("Status: %s \n", tuning_status_text(latest_note.status));
+            }
+            else
+            {
+                DEBUG_PRINT("No valid note estimation \n");
+            }
+
+        }
+
+        sleep_ms(10);
     }
 }
