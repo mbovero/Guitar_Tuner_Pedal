@@ -62,12 +62,13 @@ int main()
 
         // Print results/statistics
         DEBUG_PRINT(
-            "\n ADC: min=%u max=%u p2p=%u mean=%.1f \n"
+            "\nADC: min=%u max=%u p2p=%u mean=%.1f, rms=%.2f \n"
             "capture=%lu us errors=%lu overflow=%d rails=%lu \n",
             static_cast<unsigned>(frame.minimum_adc),
             static_cast<unsigned>(frame.maximum_adc),
             static_cast<unsigned>(frame.peak_to_peak_adc),
             frame.mean_adc,
+            frame.rms_adc,
             static_cast<unsigned long>(frame.capture_time_us),
             static_cast<unsigned long>(frame.conversion_error_count),
             static_cast<int>(frame.fifo_overflowed),

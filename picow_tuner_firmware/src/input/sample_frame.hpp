@@ -33,6 +33,7 @@ struct SampleFrame
     uint16_t peak_to_peak_adc = 0;  // Peak to peak amplitude this frame
 
     float mean_adc = 0.0f;  // Average ADC value this frame
+    float rms_adc = 0.0f;   // Root Mean Square of ADC values this frame
 
     uint32_t capture_time_us = 0;   // Time spent capturing this frame
 };

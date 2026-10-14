@@ -1,10 +1,11 @@
 #include "sample_buffer_input.hpp"
 
 #include "pico/stdlib.h"
-
 #include "hardware/adc.h"
 #include "hardware/dma.h"
 #include "hardware/regs/adc.h"
+
+#include <cmath>
 
 // Initialize variables private to this file
 namespace
@@ -144,7 +145,8 @@ const SampleFrame& capture_sample_frame()
     captured_frame.near_rail_count = 0;
     captured_frame.minimum_adc = 4095;
     captured_frame.maximum_adc = 0;
-    uint32_t sum = 0;
+    uint32_t sum = 0;   // Sum of ADC samples for calculating mean
+    uint64_t sum_squares = 0;   // Sum of squared samples for RMS
 
     // Inspect and clean captured samples
     for (size_t i = 0; i < captured_frame.samples.size(); ++i)
@@ -182,18 +184,30 @@ const SampleFrame& capture_sample_frame()
 
         // Update total sample sum
         sum += sample;
+        // Update squares sample sum
+        sum_squares += static_cast<uint64_t>(sample * sample);
     }
 
     // Calculate final frame statistics
+    // Store total sample count
+    const double count = static_cast<double>(captured_frame.samples.size());
+    // Calculate average sample value
+    const double mean = static_cast<double>(sum) / count;
+    // Store mean
+    captured_frame.mean_adc = static_cast<float>(mean);
+    // Calculate average of squared samples
+    const double mean_square = static_cast<double>(sum_squares) / count;
+    // Calculate sample variance
+    const double variance = mean_square - mean * mean;
+    // Calculate and store RMS
+    captured_frame.rms_adc = static_cast<float>(std::sqrt(variance > 0.0 ? variance : 0.0));
+
     // P2P = max - min
     captured_frame.peak_to_peak_adc = 
         static_cast<uint16_t>(
             captured_frame.maximum_adc -
             captured_frame.minimum_adc);
-    // Mean = sum / # of samples
-    captured_frame.mean_adc = 
-            static_cast<float>(sum) /
-            static_cast<float>(captured_frame.samples.size());
+            
     // Capture is considered valid if no overflow or conversion errors occured
     captured_frame.capture_valid = 
         !captured_frame.fifo_overflowed &&
