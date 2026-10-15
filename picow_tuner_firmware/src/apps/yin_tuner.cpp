@@ -21,6 +21,10 @@ int main()
 
     static YinEstimator estimator{SampleInputConfig::sample_rate_hz};
 
+    static SampleFrame frame{}; // Made static to keep array out of normal stack
+
+    start_sample_input();
+
     constexpr uint16_t minimum_signal_peak_to_peak = 200;
 
     // Create tuning feedback config
@@ -35,8 +39,12 @@ int main()
     // Main while loop
     while (true)
     {
-        // Collect a frame of ADC samples
-        const SampleFrame& frame = capture_sample_frame();
+        // Attempt to retrieve a sample frame
+        if(!try_get_sample_frame(frame))
+        {
+            // Skip processing if no frame was available
+            continue;
+        }
 
         // Initialize default estimate
         YinEstimate estimate{};
@@ -62,8 +70,12 @@ int main()
 
         // Print results/statistics
         DEBUG_PRINT(
-            "\nADC: min=%u max=%u p2p=%u mean=%.1f, rms=%.2f \n"
+            "\nFrame: %lu, gap: %d, dropped: %lu\n"
+            "ADC: min=%u max=%u p2p=%u mean=%.1f, rms=%.2f \n"
             "capture=%lu us errors=%lu overflow=%d rails=%lu \n",
+            static_cast<unsigned long>(frame.sequence_number),
+            static_cast<int>(frame.discontinuous),
+            static_cast<unsigned long>(dropped_sample_frames()),
             static_cast<unsigned>(frame.minimum_adc),
             static_cast<unsigned>(frame.maximum_adc),
             static_cast<unsigned>(frame.peak_to_peak_adc),

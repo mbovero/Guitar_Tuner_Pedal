@@ -4,4 +4,8 @@
 
 void initialize_sample_input();
 
-const SampleFrame& capture_sample_frame();
+void start_sample_input();
+
+bool try_get_sample_frame(SampleFrame& frame);
+
+uint32_t dropped_sample_frames();
