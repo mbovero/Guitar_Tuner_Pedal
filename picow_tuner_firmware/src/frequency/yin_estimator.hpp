@@ -25,7 +25,7 @@ public:
     // Initializes a YinEstimator instance with the provided ADC sampling rate
     explicit YinEstimator(float sampling_rate);
 
-    YinEstimate estimate(const uint16_t* samples, size_t sample_count);
+    YinEstimate estimate(const int16_t* samples, size_t sample_count);
 
 private:
     // Number of samples compared at each lag

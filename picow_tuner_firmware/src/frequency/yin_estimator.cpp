@@ -13,7 +13,7 @@ YinEstimator::YinEstimator(float sampling_rate)
  * If successful, a result struct containing the estimated frequency and some related statistics 
  * is returned.
  */
-YinEstimate YinEstimator::estimate(const uint16_t* samples, size_t sample_count)
+YinEstimate YinEstimator::estimate(const int16_t* samples, size_t sample_count)
 {
     YinEstimate result{};
 
@@ -47,10 +47,10 @@ YinEstimate YinEstimator::estimate(const uint16_t* samples, size_t sample_count)
         return result;
     }
 
-    // Ensure all samples are within 12-bit ADC range
+    // Ensure all samples are within a signed 13-bit range (increased range for prior filtering)
     for (size_t i = 0; i < sample_count; ++i)
     {
-        if (samples[i] > 4095)
+        if (samples[i] < -8192 || samples[i] > 8191)    // We allow values +/- 2^13 so filter transients do not invalidate the data
         {
             return result;
         }
