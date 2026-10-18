@@ -36,7 +36,7 @@ struct SampleFrame
     float rms_adc = 0.0f;   // Root Mean Square of ADC values this frame
 
     uint32_t sequence_number = 0;   // Value to track sequential frames
-    bool discontinuous = false;     // Indicates if something disrupted the continuous data stream
+    bool discontinuous = false;     // True if capture is invalid or if sequence number is out of order
 
     uint32_t capture_time_us = 0;   // Interval between DMA completion interrupts
 };
