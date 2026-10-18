@@ -139,14 +139,9 @@ int main()
     static std::array<int16_t, SampleInputConfig::frame_sample_count> filtered_samples{};
 
     // Filter control variables
-    // Notch filter toggle
+    // Notch filters toggle
     constexpr bool use_notch = true;
-    // How many total samples must be processed to consider the filter response settled
-    constexpr uint32_t settling_sample_count = 
-        static_cast<uint32_t>(0.75f * SampleInputConfig::sample_rate_hz);
-    // Remaining number of samples to be processed before filter response settles
-    uint32_t settling_samples_remaining = 0;
-    // Whether the notch filter has been initialized
+    // Whether the notch filters have been initialized and have usable history
     bool filter_initialized = false;
 
     // Begin input signal frame acquisition
@@ -179,9 +174,6 @@ int main()
         // Initialize default filtered frame stats
         FilteredFrameStats filtered_stats{};
 
-        // Whether this frame was processed after the filter settled
-        bool filtered_frame_settled = false;
-
         // Initialize total filtering time
         uint32_t filter_time_us = 0;
         // Initialize total processing time
@@ -211,15 +203,9 @@ int main()
                 notch_60.reset(initial_value);
                 notch_120.reset(initial_value);
 
-                // Reset remaining settling samples count
-                settling_samples_remaining = settling_sample_count;
-
                 // Mark filter as initialized
                 filter_initialized = true;
             }
-
-            // Whether the input was settling during this frame
-            const bool settled_during_frame = settling_samples_remaining != 0;
 
             // Record current timestamp to measure time spent filtering
             const uint32_t filter_start_us = time_us_32();
@@ -237,25 +223,6 @@ int main()
             if (!filtered_stats.valid)
             {
                 filter_initialized = false;
-                settling_samples_remaining = 0;
-            }
-            else    // Otherwise, update filter state
-            {
-                // Store number of samples
-                const uint32_t count = static_cast<uint32_t>(frame.samples.size());
-
-                // Update settling samples count
-                if (settling_samples_remaining > count)
-                {
-                    settling_samples_remaining -= count;
-                }
-                else
-                {
-                    settling_samples_remaining = 0;
-                }
-
-                // Do not estimate frequency of frames who settled part way through
-                filtered_frame_settled = !settled_during_frame;
             }
         }
 
@@ -273,8 +240,7 @@ int main()
         // Determine if input to the estimator is valid
         const bool estimator_input_valid =
             frame.capture_valid &&      // Original sample frame must be valid
-            (!use_notch ||              // And must either not be using notch filter
-                (filtered_stats.valid && filtered_frame_settled));    // or filtered results are valid and the filter has settled
+            (!use_notch || filtered_stats.valid);   // And must either not be using notch filter or filtered results are valid
 
         // Determine if an input signal is present
         const bool signal_present = estimator_peak_to_peak >= minimum_signal_peak_to_peak;
@@ -327,10 +293,6 @@ int main()
         else if (use_notch && !filtered_stats.valid)
         {
             DEBUG_PRINT("Filter output invalid\n");
-        }
-        else if (use_notch && !filtered_frame_settled)
-        {
-            DEBUG_PRINT("Filter settling\n");
         }
         else if (!signal_present)
         {
