@@ -43,6 +43,7 @@ add_executable(picow_tuner_firmware
     src/apps/yin_tuner.cpp
     src/input/sample_buffer_input.cpp
     src/frequency/yin_estimator.cpp
+    src/filters/notch_filter.cpp
 
     src/tuning/tuning_feedback.cpp
 
