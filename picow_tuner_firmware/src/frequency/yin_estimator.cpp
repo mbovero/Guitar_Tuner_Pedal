@@ -8,6 +8,34 @@ YinEstimator::YinEstimator(float sampling_rate)
 }
 
 /*
+ * Determines if this YinEstimator supports frames of the provided size.
+ * Returns true if valid, otherwise false.
+ */
+bool YinEstimator::supports_frame(size_t sample_count) const
+{
+    // Require sample rate to be positive and finite
+    if (!std::isfinite(sample_rate_hz) ||
+        sample_rate_hz <= 0.0f)
+        {
+            return false;
+        }
+
+    // Require that sample rate is compatible with YIN implementation
+    const float min_period = sample_rate_hz / max_frequency_hz;
+    const float max_period = sample_rate_hz / min_frequency_hz;
+    if (min_period < 2.0f ||    // At least two samples per period are required for comparison
+        max_period > static_cast<float>(max_supported_lag)) // Max period cannot exceed working array capacity
+    {
+        return false;
+    }
+
+    // There must be enough samples to allow for the configured comparison and frequency range
+    const size_t last_lag = static_cast<size_t>(std::ceil(max_period)) + 1;
+    return sample_count >= comparison_samples + last_lag;
+
+}
+
+/*
  * Produces an estimate from the provided samples using the YIN algorithm.
  * Returns a default, invalid result if the estimator config or provided samples are invalid.
  * If successful, a result struct containing the estimated frequency and some related statistics 
@@ -18,9 +46,7 @@ YinEstimate YinEstimator::estimate(const int16_t* samples, size_t sample_count)
     YinEstimate result{};
 
     // Input samples and sampling rate must be valid
-    if (samples == nullptr ||
-        !std::isfinite(sample_rate_hz) ||
-        sample_rate_hz <= 0.0f)
+    if (samples == nullptr || !supports_frame(sample_count))
     {
         return result;
     }
@@ -29,23 +55,10 @@ YinEstimate YinEstimator::estimate(const int16_t* samples, size_t sample_count)
     const float min_period = sample_rate_hz / max_frequency_hz;
     const float max_period = sample_rate_hz / min_frequency_hz;
 
-    // Configured period range must be valid
-    if (min_period < 2.0f ||    // At least two samples per period are required for comparison
-        max_period > static_cast<float>(max_supported_lag)) // Max period cannot exceed working array capacity
-    {
-        return result;
-    }
-
     // Convert fractional bounds into indexes
     const size_t min_lag = static_cast<size_t>(std::floor(min_period));
     const size_t max_lag = static_cast<size_t>(std::ceil(max_period));
     const size_t last_lag = max_lag + 1;    // Includes extra neighbor needed for interpolation
-
-    // There must be enough samples to allow for the configured comparison and frequency range
-    if (sample_count < comparison_samples + last_lag)
-    {
-        return result;
-    }
 
     // Ensure all samples are within a signed 13-bit range (increased range for prior filtering)
     for (size_t i = 0; i < sample_count; ++i)

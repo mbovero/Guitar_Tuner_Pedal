@@ -27,6 +27,8 @@ public:
 
     YinEstimate estimate(const int16_t* samples, size_t sample_count);
 
+    bool supports_frame(size_t sample_count) const;
+
 private:
     // Number of samples compared at each lag
     static constexpr size_t comparison_samples = 512;
