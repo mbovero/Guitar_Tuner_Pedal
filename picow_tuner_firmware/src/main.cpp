@@ -160,11 +160,6 @@ int main()
     // Begin input signal frame acquisition
     start_sample_input();
 
-    // Below this threshold, the input is considered idle
-    constexpr uint16_t minimum_signal_peak_to_peak = 200;
-    // Idle input DC voltage in ADC values
-    constexpr double midpoint = 2093.0;
-
     // Create tuning feedback config
     const TuningConfig tuning_config {
         440.0f, // Modern standard pitch (A4 = 440 Hz)
@@ -205,7 +200,7 @@ int main()
             for (size_t i = 0; i < frame.samples.size(); ++i)
             {
                 // Remove approximate DC offset from each sample for intuitive calculations
-                const int32_t centered = static_cast<int32_t>(frame.samples[i]) - static_cast<int32_t>(midpoint);
+                const int32_t centered = static_cast<int32_t>(frame.samples[i]) - midpoint_adc;
                 // Update centered samples array
                 centered_samples[i] = static_cast<int16_t>(centered);
             }
@@ -214,7 +209,7 @@ int main()
             if (!filter_initialized || frame.discontinuous)
             {
                 // Reset the notch filter using an estimated baseline as the initial value
-                const double initial_value = static_cast<double>(frame.mean_adc) - midpoint;
+                const double initial_value = static_cast<double>(frame.mean_adc) - static_cast<double>(midpoint_adc);
                 comb.reset(initial_value);
 
                 // Mark filter as initialized

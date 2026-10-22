@@ -3,6 +3,11 @@
 #include <cstddef>
 #include <cstdint>
 
+// Below this threshold, the input is considered idle
+inline constexpr uint16_t minimum_signal_peak_to_peak = 200;
+// Idle input DC voltage in ADC values
+inline constexpr int32_t midpoint_adc = 2093;
+
 namespace SampleInputConfig
 {
     // ADC sampling rate (Hz)
