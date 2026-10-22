@@ -3,13 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-
-// Configuration for the sample buffer input
-namespace SampleInputConfig
-{
-    constexpr float sample_rate_hz = 8000.0f;   // ADC sampling rate
-    constexpr size_t frame_sample_count = 1024; // Number of ADC samples in a frame
-}
+#include "tuner_config.hpp"
 
 // A frame of ADC samples, the frame's validity, and frame errors and statistics 
 struct SampleFrame
