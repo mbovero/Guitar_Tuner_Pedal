@@ -67,6 +67,7 @@ target_link_libraries(picow_tuner_firmware
         hardware_adc
         hardware_dma
         hardware_irq
+        hardware_clocks
 )
 
 # Add the standard include files to the build
