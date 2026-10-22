@@ -9,6 +9,7 @@
 #include "hardware/dma.h"
 #include "hardware/irq.h"
 #include "hardware/regs/adc.h"
+#include "hardware/clocks.h"
 
 // Initialize variables private to this file
 namespace
@@ -138,8 +139,9 @@ namespace
         // Calculate and store RMS
         frame.rms_adc = static_cast<float>(std::sqrt(variance > 0.0 ? variance : 0.0));
 
-        // Capture is considered valid if no overflow or conversion errors occured
+        // Capture is still considered valid if no overflow or conversion errors occured
         frame.capture_valid = 
+            frame.capture_valid &&
             !frame.fifo_overflowed &&
             frame.conversion_error_count == 0;
     }
@@ -209,6 +211,7 @@ namespace
         completed_frame.fifo_overflowed = overflow;
         // Timing is valid if neither this block nor the last experienced an overflow
         completed_frame.continuity_valid = !overflow && !previous_fifo_overflow;
+        previous_fifo_overflow = overflow;
 
         // Attempt to queue a copy of the completed block
         if (!queue_try_add(&completed_frame_queue, &completed_frame))
@@ -254,16 +257,22 @@ void initialize_sample_input()
         false   // Preserve the full 12-bit ADC value
     );
 
-    // Set the ADC clock divisor to achieve the desired sampling rate
-    // If ADC sampling rate is set to maximum (500 KHz), divisor must be set differently
-    if (SampleInputConfig::sample_rate_hz >= 500'000.0f)
+    // Obtain the ADC clock configured by the SDK
+    const uint32_t adc_clock_hz = clock_get_hz(clk_adc);
+    // Comb filter requires an integer number of ADC clock cycles per sample, avoiding fractional-divider rounding
+    if (adc_clock_hz % SampleInputConfig::sample_rate_hz != 0)
     {
-        adc_set_clkdiv(0.0f);
+        panic("Sample rate requires a fractional ADC clock period");
     }
-    else    // Otherwise, do standard Hz to divisor conversion
+    // Calculate clock divider
+    const uint32_t clocks_per_sample = adc_clock_hz / SampleInputConfig::sample_rate_hz;
+    // Ensure divider is valid; RP2040 conversions take 96 cycles; divider's integer field supports values through 65535
+    if (clocks_per_sample < 96u || clocks_per_sample > 65536u)
     {
-        adc_set_clkdiv((48'000'000.0f / SampleInputConfig::sample_rate_hz) - 1.0f);
+        panic("Sample rate is outside the supported ADC divider range");
     }
+    // Set clock divider
+    adc_set_clkdiv(static_cast<float>(clocks_per_sample - 1u));
 
     // Discard any leftover samples
     adc_fifo_drain();
