@@ -7,10 +7,14 @@
 #include "pico/stdlib.h"
 
 #include "debug.hpp"
+#include "tuner_config.hpp"
 #include "frequency/yin_estimator.hpp"
 #include "input/sample_buffer_input.hpp"
 #include "tuning/tuning_feedback.hpp"
-#include "filters/notch_filter.hpp"
+#include "filters/comb_filter.hpp"
+
+// Notch comb filter type alias
+using HumCombFilter = CombFilter<HumFilterConfig::delay_samples>;   
 
 // Contains statistics on a filtered frame of ADC samples
 struct FilteredFrameStats
@@ -30,8 +34,7 @@ struct FilteredFrameStats
  * Returns default statistics if inputs were invalid or an error occured.
  */
 FilteredFrameStats filter_frame(
-    NotchFilter& notch_60,
-    NotchFilter& notch_120,
+    HumCombFilter& filter,
     const int16_t* input,
     int16_t* output,
     size_t sample_count)
@@ -57,8 +60,7 @@ FilteredFrameStats filter_frame(
     for (size_t i = 0; i < sample_count; ++i)
     {
         // Filter each sample
-        const double after_60 = notch_60.process(static_cast<double>(input[i]));
-        const double filtered = notch_120.process(after_60);
+        const double filtered = filter.process(static_cast<double>(input[i]));
 
         // If filtered sample is invalid, return early
         if (!std::isfinite(filtered) ||
@@ -117,21 +119,23 @@ int main()
 
     // Initialize our YIN frequency estimator
     static YinEstimator estimator{SampleInputConfig::sample_rate_hz};
+    if (!estimator.supports_frame(SampleInputConfig::frame_sample_count))
+    {
+        panic("YIN sample rate, frequency range, and frame size are incompatible");
+    }
 
     // Made static to keep array out of normal stack
     static SampleFrame frame{}; // The current frame of ADC samples being processed
 
-    // Configure notch filters
-    static NotchFilter notch_60;
-    static NotchFilter notch_120;
-    const bool configured_60 = notch_60.configure(SampleInputConfig::sample_rate_hz, 60.0, 30.0);
-    const bool configured_120 = notch_120.configure(SampleInputConfig::sample_rate_hz, 120.0, 30.0);
-
-    if (!configured_60 || !configured_120)
+    // Configure filter
+    static HumCombFilter comb;
+    if (!comb.configure(
+            SampleInputConfig::sample_rate_hz,
+            HumFilterConfig::notch_bandwidth_hz))
     {
-        // If configuration fails, panic
-        panic("Failed to configure hum filters");
+        panic("Failed to configure hum comb filter");
     }
+
 
     // Array for centering ADC samples near 0 V
     static std::array<int16_t, SampleInputConfig::frame_sample_count> centered_samples{};
@@ -140,15 +144,24 @@ int main()
 
     // Filter control variables
     // Notch filters toggle
-    constexpr bool use_notch = true;
+    constexpr bool use_filter = true;
     // Whether the notch filters have been initialized and have usable history
     bool filter_initialized = false;
+
+
+    DEBUG_PRINT(
+    "Sample rate: %lu Hz, expected frame: %.1f us, comb delay: %u samples \n",
+    static_cast<unsigned long>(SampleInputConfig::sample_rate_hz),
+    SampleInputConfig::expected_frame_time_us,
+    static_cast<unsigned>(HumFilterConfig::delay_samples));
 
     // Begin input signal frame acquisition
     start_sample_input();
 
     // Below this threshold, the input is considered idle
     constexpr uint16_t minimum_signal_peak_to_peak = 200;
+    // Idle input DC voltage in ADC values
+    constexpr double midpoint = 2093.0;
 
     // Create tuning feedback config
     const TuningConfig tuning_config {
@@ -190,7 +203,7 @@ int main()
             for (size_t i = 0; i < frame.samples.size(); ++i)
             {
                 // Remove approximate DC offset from each sample for intuitive calculations
-                const int32_t centered = static_cast<int32_t>(frame.samples[i]) - 2093; //TODO magic number
+                const int32_t centered = static_cast<int32_t>(frame.samples[i]) - static_cast<int32_t>(midpoint);
                 // Update centered samples array
                 centered_samples[i] = static_cast<int16_t>(centered);
             }
@@ -199,9 +212,8 @@ int main()
             if (!filter_initialized || frame.discontinuous)
             {
                 // Reset the notch filter using an estimated baseline as the initial value
-                const double initial_value = static_cast<double>(frame.mean_adc) - 2093.0;      // TODO float magic number
-                notch_60.reset(initial_value);
-                notch_120.reset(initial_value);
+                const double initial_value = static_cast<double>(frame.mean_adc) - midpoint;
+                comb.reset(initial_value);
 
                 // Mark filter as initialized
                 filter_initialized = true;
@@ -211,8 +223,7 @@ int main()
             const uint32_t filter_start_us = time_us_32();
             // Filter this frame and record filtered frame statistics
             filtered_stats = filter_frame(
-                notch_60,
-                notch_120,
+                comb,
                 centered_samples.data(),
                 filtered_samples.data(),
                 centered_samples.size());
@@ -228,19 +239,19 @@ int main()
 
         // Feed estimator different samples based on whether notch filter was enabled
         const int16_t* estimator_samples =
-            use_notch
+            use_filter
                 ? filtered_samples.data()
                 : centered_samples.data();
         // Calculate pk2pk based on whether notch filter was enabled
         const uint32_t estimator_peak_to_peak = 
-            use_notch
+            use_filter
                 ? filtered_stats.peak_to_peak_adc
                 : frame.peak_to_peak_adc;
 
         // Determine if input to the estimator is valid
         const bool estimator_input_valid =
             frame.capture_valid &&      // Original sample frame must be valid
-            (!use_notch || filtered_stats.valid);   // And must either not be using notch filter or filtered results are valid
+            (!use_filter || filtered_stats.valid);   // And must either not be using filter, or filtered results are valid
 
         // Determine if an input signal is present
         const bool signal_present = estimator_peak_to_peak >= minimum_signal_peak_to_peak;
@@ -253,7 +264,7 @@ int main()
             // Perform estimation of signal frequency
             estimate = estimator.estimate(
                 estimator_samples,
-                centered_samples.size());   // TODO why isn't this estimator samples.size
+                SampleInputConfig::frame_sample_count);
             // Calculate elapsed calculation time
             processing_time_us = time_us_32() - processing_start_us;
         }
@@ -290,7 +301,7 @@ int main()
         {
             DEBUG_PRINT("Capture invalid\n");
         }
-        else if (use_notch && !filtered_stats.valid)
+        else if (use_filter && !filtered_stats.valid)
         {
             DEBUG_PRINT("Filter output invalid\n");
         }
