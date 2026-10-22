@@ -1,4 +1,4 @@
-#include "sample_buffer_input.hpp"
+#include "adc_input.hpp"
 
 #include <cmath>
 
