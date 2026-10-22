@@ -4,13 +4,11 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "frequency_estimate.hpp"
-
 // The estimated pitch from the YIN algorithm, alongside some related data
 struct YinEstimate
 {
-    // The estimated frequency and its validity
-    FrequencyEstimate frequency_estimate{};
+    bool valid = false;     // Whether this estimate is valid and should be used for tuning feedback
+    float freq_hz = 0.0f;   // Latest estimated frequency
 
     // The estimated number of samples per waveform cycle
     float period_samples = 0.0f;

@@ -309,7 +309,7 @@ int main()
         {
             DEBUG_PRINT("Input quiet\n");
         }
-        else if (!estimate.frequency_estimate.valid)
+        else if (!estimate.valid)
         {
             DEBUG_PRINT("No accepted pitch\n");
         }
@@ -318,12 +318,12 @@ int main()
             DEBUG_PRINT(
                 "Frequency: %.3f Hz, Period: %.4f samples, "
                 "Difference: %.6f \n",
-                estimate.frequency_estimate.freq_hz,
+                estimate.freq_hz,
                 estimate.period_samples,
                 estimate.normalized_difference);
 
             // Get tuning feedback based on latest frequency
-            latest_feedback = analyze_frequency(estimate.frequency_estimate.freq_hz, tuning_config);
+            latest_feedback = analyze_frequency(estimate.freq_hz, tuning_config);
 
             // Print valid tuning feedback
             if (latest_feedback.valid)
