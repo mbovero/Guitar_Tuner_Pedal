@@ -40,6 +40,7 @@ add_executable(picow_tuner_firmware
     src/input/adc_input.cpp
     src/frequency/yin_estimator.cpp
     src/filters/hum_filter.cpp
+    src/display/lcd_st7789.cpp
 
     src/tuning/tuning_feedback.cpp
 
@@ -64,12 +65,12 @@ target_include_directories(picow_tuner_firmware PRIVATE
 # Add any user requested libraries
 target_link_libraries(picow_tuner_firmware 
         pico_stdlib
-        hardware_spi
         pico_util
         hardware_adc
         hardware_dma
         hardware_irq
         hardware_clocks
+        hardware_spi
         )
 
 pico_add_extra_outputs(picow_tuner_firmware)
