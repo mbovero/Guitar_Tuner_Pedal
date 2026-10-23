@@ -17,7 +17,7 @@ struct TuningConfig
 };
 
 // Data structure containing detailed tuning information and feedback on the evaluated input signal
-struct TuningResult
+struct TuningFeedback
 {
     bool valid = false;             // Whether the given frequency can be interpreted
     const char* note_name = "";     // Name of the target note (C, C#, D, etc.)
@@ -31,6 +31,6 @@ struct TuningResult
     TuningStatus status = TuningStatus::NoEstimate; // State of the tuner feedback
 };
 
-TuningResult analyze_frequency(float freq_hz, const TuningConfig& config = {});
+TuningFeedback analyze_frequency(float freq_hz, const TuningConfig& config = {});
 
 const char* tuning_status_text(TuningStatus status);

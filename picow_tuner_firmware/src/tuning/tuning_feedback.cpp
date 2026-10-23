@@ -3,13 +3,13 @@
 
 /*
  * Takes the provided frequency, determines the closest pitch, and calculates the error between the two in cents.
- * Stores tuning feedback alongside other detailed information in TuningResult struct and returns it.
+ * Stores tuning feedback alongside other detailed information in TuningFeedback struct and returns it.
  * Optional config parameter allows for configuration of standard pitch and "In Tune" range.
  */
-TuningResult analyze_frequency(float freq_hz, const TuningConfig& config)
+TuningFeedback analyze_frequency(float freq_hz, const TuningConfig& config)
 {
     // Default result
-    TuningResult result{};
+    TuningFeedback result{};
 
     // Return default result if provided frequency or config is invalid
     if (!std::isfinite(freq_hz) || freq_hz <= 0.0f ||

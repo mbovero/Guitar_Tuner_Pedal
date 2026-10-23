@@ -70,7 +70,7 @@ int main()
         1.0f    // +/- range from target pitch that is considered "In Tune"
     };
     // Most recent tuning feedback
-    TuningResult latest_feedback{};
+    TuningFeedback latest_feedback{};
 
 
     // Main while loop
