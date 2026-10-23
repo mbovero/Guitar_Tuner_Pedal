@@ -1,4 +1,5 @@
 #include "yin_estimator.hpp"
+#include "tuner_config.hpp"
 
 #include <cmath>
 
@@ -60,10 +61,11 @@ YinEstimate YinEstimator::estimate(const int16_t* samples, size_t sample_count)
     const size_t max_lag = static_cast<size_t>(std::ceil(max_period));
     const size_t last_lag = max_lag + 1;    // Includes extra neighbor needed for interpolation
 
-    // Ensure all samples are within a signed 13-bit range (increased range for prior filtering)
+    // Ensure all samples are within a signed 14-bit range (increased range for prior filtering)
     for (size_t i = 0; i < sample_count; ++i)
     {
-        if (samples[i] < -8192 || samples[i] > 8191)    // We allow values +/- 2^13 so filter transients do not invalidate the data
+        if (samples[i] < ProcessedSampleLimits::minimum || 
+            samples[i] > ProcessedSampleLimits::maximum)    // We allow values +/- 2^13 so filter transients do not invalidate the data
         {
             return result;
         }

@@ -52,8 +52,8 @@ namespace
         }
 
         // Initialize variables to track min vs max
-        int32_t minimum = 8191;
-        int32_t maximum = -8192;
+        int32_t minimum = ProcessedSampleLimits::maximum;
+        int32_t maximum = ProcessedSampleLimits::minimum;
         // Initialize sums for mean and RMS
         int64_t sum = 0;
         uint64_t sum_squares = 0;
@@ -66,8 +66,8 @@ namespace
 
             // If filtered sample is invalid, return early
             if (!std::isfinite(filtered) ||
-                filtered < -8192.0 ||           // We allow values +/- 2^13 so filter transients do not invalidate the data
-                filtered > 8191.0)
+                filtered < ProcessedSampleLimits::minimum ||           // We allow values +/- 2^13 so filter transients do not invalidate the data
+                filtered > ProcessedSampleLimits::maximum)
             {
                 return stats;
             }
@@ -146,7 +146,7 @@ int main()
 
     // Filter control variables
     // Notch filters toggle
-    constexpr bool use_filter = true;
+    bool filter_enabled = true;
     // Whether the notch filters have been initialized and have usable history
     bool filter_initialized = false;
 
@@ -183,6 +183,9 @@ int main()
         YinEstimate estimate{};
         // Initialize default filtered frame stats
         FilteredFrameStats filtered_stats{};
+
+        // Check if filter is currently enabled
+        const bool use_filter = filter_enabled;
 
         // Initialize total filtering time
         uint32_t filter_time_us = 0;

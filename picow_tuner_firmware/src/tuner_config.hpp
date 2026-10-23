@@ -24,7 +24,7 @@ namespace SampleInputConfig
         "Frame size must be positive");
 
     // Approximately how long it takes to acquire a frame of ADC samples
-    inline constexpr double expected_frame_time_us = 1'000'000 * frame_sample_count / sample_rate_hz;
+    inline constexpr double expected_frame_time_us = 1'000'000.0 * frame_sample_count / sample_rate_hz;
 }
 
 namespace HumFilterConfig
@@ -48,4 +48,16 @@ namespace HumFilterConfig
     static_assert(
         delay_samples >= 2,
         "Comb requires at least two samples per hum cycle");
+}
+
+namespace ProcessedSampleLimits
+{
+    // These constants represent the range of valid outputs from filtering ADC samples: +/- 13 bits
+    // The range is wider than the ADC resolution because filter transients can push the resulting
+    // data past that range.
+
+    // Minimum allowed value for a filtered ADC sample
+    inline constexpr int32_t minimum = -8192;
+    // Maximum allowed value for a filtered ADC sample
+    inline constexpr int32_t maximum = 8191;
 }
