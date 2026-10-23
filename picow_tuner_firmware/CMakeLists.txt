@@ -55,16 +55,6 @@ pico_set_program_version(picow_tuner_firmware "0.1")
 pico_enable_stdio_uart(picow_tuner_firmware 0)
 pico_enable_stdio_usb(picow_tuner_firmware 1)
 
-# Add the standard library to the build
-target_link_libraries(picow_tuner_firmware
-        pico_stdlib
-        pico_util
-        hardware_adc
-        hardware_dma
-        hardware_irq
-        hardware_clocks
-)
-
 # Add the standard include files to the build
 target_include_directories(picow_tuner_firmware PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/src
@@ -72,9 +62,13 @@ target_include_directories(picow_tuner_firmware PRIVATE
 
 # Add any user requested libraries
 target_link_libraries(picow_tuner_firmware 
+        pico_stdlib
         hardware_spi
-        hardware_dma
+        pico_util
         hardware_adc
+        hardware_dma
+        hardware_irq
+        hardware_clocks
         )
 
 pico_add_extra_outputs(picow_tuner_firmware)
