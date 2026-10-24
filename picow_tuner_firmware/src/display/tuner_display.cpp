@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 // Initializes the LCD and paints the entire display black
 void tuner_display::init()
@@ -49,13 +50,25 @@ void tuner_display::update(const TuningFeedback& feedback, bool clipping)
         target_frequency = feedback.target_freq_hz;
 
         /* Draw error in cents */
+        // Round the displayed value to tenths.
+        float displayed_cents =
+            std::round(cents_error * 10.0f) / 10.0f;
+        // Prevent displaying "-0.0".
+        if (displayed_cents == 0.0f) 
+        {
+            displayed_cents = 0.0f;
+        }
         // Convert float error to string
         char cents_text[8];
-        std::snprintf(cents_text, sizeof(cents_text), "%.1f c", cents_error);
+        std::snprintf(cents_text, sizeof(cents_text), "%+4.1f c", displayed_cents);
+
+        constexpr int cents_scale = 3;
+        const int cents_width = static_cast<int>(std::strlen(cents_text) * 6 * cents_scale);
+        const int cents_x = (static_cast<int>(lcd::width) - cents_width) / 2;
         // Clear old error text
         lcd::fill_rect(0, 15, 240, 24, 0x0000);
         // Draw cents error
-        lcd::draw_string(120-60, 15, cents_text, 0xFFFF, 0x0000, 3);
+        lcd::draw_string(cents_x, 15, cents_text, 0xFFFF, 0x0000, cents_scale);
     
     
         /* Draw tuning feedback bar */
