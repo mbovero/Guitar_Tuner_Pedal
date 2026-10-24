@@ -34,16 +34,14 @@ project(picow_tuner_firmware C CXX ASM)
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
-
 add_executable(picow_tuner_firmware 
-    #src/main.cpp
+    src/main.cpp
     src/input/adc_input.cpp
     src/frequency/yin_estimator.cpp
     src/filters/hum_filter.cpp
-    src/display/lcd_st7789.cpp
     src/tuning/tuning_feedback.cpp
-
-    src/display/test.cpp
+    src/display/lcd_st7789.cpp
+    src/display/tuner_display.cpp
 )
 
 target_compile_definitions(picow_tuner_firmware PRIVATE

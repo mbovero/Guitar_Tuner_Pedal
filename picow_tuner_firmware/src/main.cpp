@@ -12,6 +12,7 @@
 #include "input/adc_input.hpp"
 #include "tuning/tuning_feedback.hpp"
 #include "filters/hum_filter.hpp"
+#include "display/tuner_display.hpp"
 
 
 int main()
@@ -41,6 +42,9 @@ int main()
     {
         panic("Failed to configure hum comb filter");
     }
+
+    // Initialize feedback display
+    tuner_display::init();
 
 
     // Array for centering ADC samples near 0 V
@@ -172,9 +176,28 @@ int main()
             // Calculate elapsed calculation time
             processing_time_us = time_us_32() - processing_start_us;
         }
+        
+        // Default to no valid feedback for this frame
+        latest_feedback = {};
+        // Only get feedback for valid estimates
+        if (estimator_input_valid &&
+            signal_present &&
+            estimate.valid)
+        {
+            // Get tuning feedback based on estimated frequency
+            latest_feedback = analyze_frequency(estimate.freq_hz, tuning_config);
+        }
+        
+        // Determine if input signal was clipping
+        const bool clipping = (frame.near_rail_count >= 20);
 
+        // Display feedback on LCD and track time taken to do so
+        const uint32_t display_start_us = time_us_32();
+        tuner_display::update(latest_feedback, clipping);
+        const uint32_t display_time_us = time_us_32() - display_start_us;
 
         // Print results/statistics
+        DEBUG_PRINT("display time=%lu \n", static_cast<unsigned long>(display_time_us));
         DEBUG_PRINT(
             "\nframe=%lu, gap=%d, dropped=%lu\n"
             "ADC: min=%u max=%u mean=%.1f \n"
@@ -225,9 +248,6 @@ int main()
                 estimate.freq_hz,
                 estimate.period_samples,
                 estimate.normalized_difference);
-
-            // Get tuning feedback based on latest frequency
-            latest_feedback = analyze_frequency(estimate.freq_hz, tuning_config);
 
             // Print valid tuning feedback
             if (latest_feedback.valid)
