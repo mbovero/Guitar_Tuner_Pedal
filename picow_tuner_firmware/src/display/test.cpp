@@ -7,19 +7,18 @@ int main()
     stdio_init_all();
 
     lcd::init();
+    lcd::fill(0x0000);
 
-    while (true)
-    {
-        DEBUG_PRINT("RED\n");
-        lcd::fill(0xF800);
-        sleep_ms(1000);
+    lcd::fill_rect(0, 0, 20, 20, 0xF800);
+    lcd::fill_rect(220, 0, 20, 20, 0x07E0);
+    lcd::fill_rect(0, 220, 20, 20, 0x001F);
 
-        DEBUG_PRINT("GREEN\n");
-        lcd::fill(0x07E0);
-        sleep_ms(1000);
+    lcd::fill_rect(90, 90, 60, 60, 0xFFFF);
 
-        DEBUG_PRINT("BLUE\n");
-        lcd::fill(0x001F);
-        sleep_ms(1000);
+    // Intentionally extends beyond the screen.
+    lcd::fill_rect(230, 230, 30, 30, 0xFFE0);
+
+    while (true) {
+        tight_loop_contents();
     }
 }

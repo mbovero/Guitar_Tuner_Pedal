@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
+#include <algorithm>
 
 #include "pico/stdlib.h"
 #include "hardware/spi.h"
@@ -172,34 +173,64 @@ void lcd::init()
     configure_panel();
 }
 
-// Fills the entire LCD display with the provided RGB565 color
-void lcd::fill(uint16_t color)
+/*
+ * Fills a rectangle of the specified size at the given location with the RGB565 color.
+ * x and y specify the location of the top left corner of the rectangle.
+ */
+void lcd::fill_rect(
+    uint16_t x,
+    uint16_t y,
+    uint16_t rect_width,
+    uint16_t rect_height,
+    uint16_t color)
 {
-    // Create an array of bytes to hold RGB565 values for one row of the display
+    // Return early if parameters are invalid
+    if (x >= width || y >= height ||
+        rect_width <= 0 || rect_height <= 0)
+    {
+        return;
+    }
+    
+    // Clip rectangles to fit screen
+    rect_width = std::min<uint16_t>(rect_width, width - x);
+    rect_height = std::min<uint16_t>(rect_height, height - y);
+
+    // Create an array of bytes to hold RGB565 values
     uint8_t row[width * 2];
 
+    // Isolate RGB565 color bytes
     const uint8_t high_byte = static_cast<uint8_t>(color >> 8);
     const uint8_t low_byte = static_cast<uint8_t>(color & 0xFF);
 
-    // Copy RGB565 color value into row for every pixel
-    for (size_t x = 0; x < width; ++x)
+    // Fill array to rectangle width with color
+    for (uint16_t column = 0; column < rect_width; ++column)
     {
-        row[2 * x] = high_byte;
-        row[2 * x + 1] = low_byte;
+        row[2 * column] = high_byte;
+        row[2 * column + 1] = low_byte;
     }
 
-    // Have controller update the entire display
-    set_window(0, 0, width - 1, height - 1);
+    // Calculate pixel location of the bottom right corner of the rectangle
+    const uint16_t x_end = static_cast<uint16_t>(x + rect_width - 1);
+    const uint16_t y_end = static_cast<uint16_t>(y + rect_height - 1);
+
+    // Tell display controller to only update the rectangle's area
+    set_window(x, y, x_end, y_end);
 
     gpio_put(pin_dc, true); // Tell controller data is being sent
     gpio_put(pin_cs, false);// Select LCD controller chip
-    
-    // Write pixel color data for every row of the display
-    for (uint16_t y = 0; y < height; ++y)
+
+    // Display rectangle row by row
+    for (uint16_t row_index = 0; row_index < rect_height; ++row_index)
     {
-        spi_write_blocking(spi0, row, sizeof(row));
+        spi_write_blocking(spi0, row, rect_width * 2);
     }
 
-    // Deselect controller
+    // Deselect LCD controller
     gpio_put(pin_cs, true);
+}
+
+// Fills the entire LCD display with the provided RGB565 color
+void lcd::fill(uint16_t color)
+{
+    fill_rect(0, 0, width, height, color);
 }
