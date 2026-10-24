@@ -16,4 +16,12 @@ namespace lcd
         uint16_t rect_width,
         uint16_t rect_height,
         uint16_t color);
+    void draw_pixel(uint16_t x, uint16_t y, uint16_t color);
+    void draw_rect_outline(
+        uint16_t x, 
+        uint16_t y,
+        uint16_t rect_width,
+        uint16_t rect_height,
+        uint16_t thickness,
+        uint16_t color);
 }

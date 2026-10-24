@@ -174,7 +174,7 @@ void lcd::init()
 }
 
 /*
- * Fills a rectangle of the specified size at the given location with the RGB565 color.
+ * Fills a rectangle of the specified size at the given LCD location with a RGB565 color.
  * x and y specify the location of the top left corner of the rectangle.
  */
 void lcd::fill_rect(
@@ -233,4 +233,28 @@ void lcd::fill_rect(
 void lcd::fill(uint16_t color)
 {
     fill_rect(0, 0, width, height, color);
+}
+
+// Sets the pixel at the specified LCD location to the provided RGB565 color
+void lcd::draw_pixel(uint16_t x, uint16_t y, uint16_t color)
+{
+    fill_rect(x, y, 1, 1, color);
+}
+
+void lcd::draw_rect_outline(
+    uint16_t x, 
+    uint16_t y,
+    uint16_t rect_width,
+    uint16_t rect_height,
+    uint16_t thickness,
+    uint16_t color)
+{
+    // Draw upper line
+    fill_rect(x, y, rect_width, thickness, color);
+    // Draw lower line
+    fill_rect(x, (y + rect_height) - thickness, rect_width, thickness, color);
+    // Draw left line without overlap
+    fill_rect(x, y + thickness, thickness, rect_height - 2*thickness, color);
+    // Draw right line without overlap
+    fill_rect((x + rect_width) - thickness, y + thickness, thickness, rect_height - 2*thickness, color);
 }
