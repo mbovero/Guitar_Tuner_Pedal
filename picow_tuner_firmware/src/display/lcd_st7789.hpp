@@ -24,4 +24,19 @@ namespace lcd
         uint16_t rect_height,
         uint16_t thickness,
         uint16_t color);
+
+    void draw_char(
+        uint16_t x,
+        uint16_t y,
+        char character,
+        uint16_t foreground,
+        uint16_t background,
+        uint8_t scale = 1);
+    void draw_string(
+        uint16_t x,
+        uint16_t y,
+        const char* text,
+        uint16_t foreground,
+        uint16_t background,
+        uint8_t scale = 1);
 }

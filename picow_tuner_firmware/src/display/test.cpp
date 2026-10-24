@@ -24,7 +24,16 @@ int main()
     // Intentionally extends beyond the screen
     lcd::fill_rect(230, 230, 30, 30, 0xFFE0);   // Clipped yellow square bottom right
 
-    while (true) {
+    // Draw aquamarine characters
+    lcd::draw_char(30, 30, 'A', 0x07bf, 0x0000, 2);
+    lcd::draw_char(70, 30, '#', 0x07bf, 0x0000, 4);
+    lcd::draw_char(130, 30, '0', 0x07bf, 0x0000, 8);
+
+    // Draw pink string
+    lcd::draw_string(30, 180, "+ x -", 0xf81f, 0x0000, 4);
+
+    while (true) 
+    {
         tight_loop_contents();
     }
 }

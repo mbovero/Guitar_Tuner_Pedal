@@ -163,6 +163,72 @@ namespace
         // Begin writing pixel memory
         write_command(0x2C);
     }
+
+
+    // Contains a character and its corresponding 7 x 5 bitmap
+    struct Glyph
+    {
+        char character;
+        uint8_t rows[7];
+    };
+
+    constexpr Glyph font[] = 
+    {
+        {' ', {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
+
+        {'A', {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}},
+        {'B', {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E}},
+        {'C', {0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E}},
+        {'D', {0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E}},
+        {'E', {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F}},
+        {'F', {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10}},
+        {'G', {0x0E, 0x11, 0x10, 0x13, 0x11, 0x11, 0x0E}},
+
+        {'0', {0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E}},
+        {'1', {0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E}},
+        {'2', {0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F}},
+        {'3', {0x1E, 0x01, 0x01, 0x0E, 0x01, 0x01, 0x1E}},
+        {'4', {0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02}},
+        {'5', {0x1F, 0x10, 0x10, 0x1E, 0x01, 0x01, 0x1E}},
+        {'6', {0x0E, 0x10, 0x10, 0x1E, 0x11, 0x11, 0x0E}},
+        {'7', {0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08}},
+        {'8', {0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E}},
+        {'9', {0x0E, 0x11, 0x11, 0x0F, 0x01, 0x01, 0x0E}},
+
+        {'#', {0x0A, 0x0A, 0x1F, 0x0A, 0x1F, 0x0A, 0x0A}},
+        {'+', {0x00, 0x04, 0x04, 0x1F, 0x04, 0x04, 0x00}},
+        {'-', {0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00}},
+        {'.', {0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C}},
+        {'?', {0x0E, 0x11, 0x01, 0x02, 0x04, 0x00, 0x04}}
+    };
+
+    /*
+     * Attempts to look up the glyph for the provided character. If one is found, the corresponding
+     * bitmap is returned. Otherwise, the bitmap for '?' is returned.
+     */
+    const uint8_t* find_glyph(char character)
+    {
+        // Look up character glyph and return bit map
+        for (const Glyph& glyph : font)
+        {
+            if (glyph.character == character)
+            {
+                return glyph.rows;
+            }
+        }
+
+        // If character glyph does not exist, return '?' bitmap
+        for (const Glyph& glyph : font)
+        {
+            // Look up '?' glyph
+            if (glyph.character == '?')
+            {
+                return glyph.rows;
+            }
+        }
+
+        return nullptr;
+    }
 }
 
 // Initializes bus to communicate with LCD driver, then resets and configures the panel
@@ -175,7 +241,8 @@ void lcd::init()
 
 /*
  * Fills a rectangle of the specified size at the given LCD location with a RGB565 color.
- * x and y specify the location of the top left corner of the rectangle.
+ * x and y specify the location of the top left corner of the rectangle. The top left of the
+ * display is (0, 0).
  */
 void lcd::fill_rect(
     uint16_t x,
@@ -257,4 +324,93 @@ void lcd::draw_rect_outline(
     fill_rect(x, y + thickness, thickness, rect_height - 2*thickness, color);
     // Draw right line without overlap
     fill_rect((x + rect_width) - thickness, y + thickness, thickness, rect_height - 2*thickness, color);
+}
+
+/*
+ * Draws a scaled character with the specified foreground and background RGB565 colors at the provided
+ * location on the LCD.
+ * Drawing the background covers up old characters painted in the same position.
+ */
+void lcd::draw_char(
+    uint16_t x,
+    uint16_t y,
+    char character,
+    uint16_t foreground,
+    uint16_t background,
+    uint8_t scale)
+{
+    // Return early if parameters invalid
+    if (scale == 0 || x >= width || y >= height)
+    {
+        return;
+    }
+
+    // Find the bitmap for the provided character
+    const uint8_t* bitmap = find_glyph(character);
+    // Return early if no bitmap found
+    if (bitmap == nullptr)
+    {
+        return;
+    }
+
+    // Paint character cell background with extra space
+    fill_rect(x, y, 6 * scale, 8 * scale, background);
+
+    for (uint16_t row = 0; row < 7; ++row)
+    {
+        for (uint16_t column = 0; column < 5; ++column)
+        {
+            // Prepare mask based on column position to determine if current position is foreground
+            const uint8_t mask = static_cast<uint8_t>(1u << (4 - column));
+
+            // If current bitmap location holds 1, print scaled foreground pixel
+            if ((bitmap[row] & mask) != 0)
+            {
+                fill_rect(
+                    x + column * scale,
+                    y + row * scale,
+                    scale,
+                    scale,
+                    foreground);
+            }
+        }
+    }
+}
+
+
+void lcd::draw_string(
+    uint16_t x,
+    uint16_t y,
+    const char* text,
+    uint16_t foreground,
+    uint16_t background,
+    uint8_t scale)
+{
+    // Return early if parameters are invalid
+    if (text == nullptr ||
+        scale == 0 ||
+        x >= width || y >= height)
+    {
+        return;
+    }
+
+    // Initialize cursor to track x position of characters across display
+    uint32_t cursor_x = x;
+    // Calculate space between characters
+    const uint32_t advance = 6u * scale;
+
+    // Iterate through string and draw characters that fit on the display
+    while (*text != '\0' && cursor_x < width)
+    {
+        draw_char(
+            static_cast<uint16_t>(cursor_x),
+            y,
+            *text,
+            foreground,
+            background,
+            scale);
+        
+        cursor_x += advance;    // Advance character spacing
+        ++text; // Move to next character
+    }
 }
