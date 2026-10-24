@@ -16,7 +16,7 @@ namespace
     constexpr uint pin_dc = 16;     // Command/Data GPIO #  (DC)
     constexpr uint pin_rst = 20;    // Reset GPIO #         (RST)
 
-    constexpr uint spi_baudrate = 1'000'000;
+    constexpr uint spi_baudrate = 16'000'000;
 
     // Helper function that configures the provided GPIO pin as an output with the specified initial_level
     void init_output(uint pin, bool initial_level)
@@ -41,6 +41,9 @@ namespace
             SPI_CPOL_0,     // Clock rests low
             SPI_CPHA_0,     // Receiver samples on the rising CLK edge
             SPI_MSB_FIRST); // Transmit high bit first, low bit last
+        // Configure SPI pins
+        gpio_set_function(pin_clk, GPIO_FUNC_SPI);
+        gpio_set_function(pin_mosi, GPIO_FUNC_SPI);
     }
 
     // Sends the provided command to the LCD controller
@@ -57,7 +60,7 @@ namespace
     // Writes "count" bytes from the provided "data" array to the LCD controller
     void write_data(const uint8_t* data, size_t count)
     {
-        gpio_put(pin_dc, false);    // Indicate that data is being sent
+        gpio_put(pin_dc, true);    // Indicate that data is being sent
         gpio_put(pin_cs, false);    // Select LCD controller chip
 
         spi_write_blocking(spi0, data, count);  // Send command via SPI peripheral
@@ -132,6 +135,33 @@ namespace
         write_command(0x29); // Display on
         sleep_ms(20);
     }
+
+    // Tells the LCD controler what rectangular region to update, then instructs it to begin writing pixel memory
+    void set_window(
+        uint16_t x_start,
+        uint16_t y_start,
+        uint16_t x_end,
+        uint16_t y_end)
+    {
+        // Set column range
+        write_register(0x2A, {
+            static_cast<uint8_t>(x_start >> 8),     // Write upper bits
+            static_cast<uint8_t>(x_start & 0xFF),   // Write lower bits
+            static_cast<uint8_t>(x_end >> 8),
+            static_cast<uint8_t>(x_end & 0xFF)
+        });
+
+        // Set row range
+        write_register(0x2B, {
+            static_cast<uint8_t>(y_start >> 8),
+            static_cast<uint8_t>(y_start & 0xFF),
+            static_cast<uint8_t>(y_end >> 8),
+            static_cast<uint8_t>(y_end & 0xFF)
+        });
+
+        // Begin writing pixel memory
+        write_command(0x2C);
+    }
 }
 
 // Initializes bus to communicate with LCD driver, then resets and configures the panel
@@ -140,4 +170,36 @@ void lcd::init()
     init_bus();
     reset_panel();
     configure_panel();
+}
+
+// Fills the entire LCD display with the provided RGB565 color
+void lcd::fill(uint16_t color)
+{
+    // Create an array of bytes to hold RGB565 values for one row of the display
+    uint8_t row[width * 2];
+
+    const uint8_t high_byte = static_cast<uint8_t>(color >> 8);
+    const uint8_t low_byte = static_cast<uint8_t>(color & 0xFF);
+
+    // Copy RGB565 color value into row for every pixel
+    for (size_t x = 0; x < width; ++x)
+    {
+        row[2 * x] = high_byte;
+        row[2 * x + 1] = low_byte;
+    }
+
+    // Have controller update the entire display
+    set_window(0, 0, width - 1, height - 1);
+
+    gpio_put(pin_dc, true); // Tell controller data is being sent
+    gpio_put(pin_cs, false);// Select LCD controller chip
+    
+    // Write pixel color data for every row of the display
+    for (uint16_t y = 0; y < height; ++y)
+    {
+        spi_write_blocking(spi0, row, sizeof(row));
+    }
+
+    // Deselect controller
+    gpio_put(pin_cs, true);
 }
