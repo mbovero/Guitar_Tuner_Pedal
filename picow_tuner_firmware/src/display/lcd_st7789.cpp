@@ -17,7 +17,7 @@ namespace
     constexpr uint pin_dc = 16;     // Command/Data GPIO #  (DC)
     constexpr uint pin_rst = 20;    // Reset GPIO #         (RST)
 
-    constexpr uint spi_baudrate = 32'000'000;
+    constexpr uint spi_baudrate = 62'000'000;
 
     // Helper function that configures the provided GPIO pin as an output with the specified initial_level
     void init_output(uint pin, bool initial_level)
