@@ -19,8 +19,6 @@ int main()
 {
     stdio_init_all();
 
-    sleep_ms(2000); // Time to connect to serial monitor
-
     // Configure ADC, DMA, and queue for continuous input signal frame acquisition
     initialize_sample_input();
 
