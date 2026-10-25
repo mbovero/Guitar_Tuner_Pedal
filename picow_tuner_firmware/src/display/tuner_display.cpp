@@ -54,6 +54,19 @@ void tuner_display::update(const TuningFeedback& feedback, bool clipping)
     float current_frequency = 0.0f;
     float target_frequency = 0.0f;
     
+
+    /* Always update clipping indicator */
+    // Only redraw if clipping state has changed
+    if(prev_clipping != clipping)
+    {
+        // If clipping, draw red outline, otherwise clear it
+        lcd::draw_rect_outline(
+            0, 0, 240, 240, 5,
+            clipping ? 0xF800 : 0x0000);
+    }
+    prev_clipping = clipping;
+
+
     // If feedback is invalid, display default feedback
     if (feedback.valid)
     {
@@ -200,20 +213,8 @@ void tuner_display::update(const TuningFeedback& feedback, bool clipping)
     lcd::fill_rect(120-2, frequency_y_offset, 4, 30, 0xc618);    
     
 
-    /* Draw clipping indicator */
-    // Only redraw if clipping state has changed
-    if(prev_clipping != clipping)
-    {
-        // If clipping, draw red outline, otherwise clear it
-        lcd::draw_rect_outline(
-            0, 0, 240, 240, 5,
-            clipping ? 0xF800 : 0x0000);
-    }
-
-
     /* Update cached values */
     prev_valid = feedback.valid;
-    prev_clipping = clipping;
 
     std::snprintf(prev_cents_text, sizeof(prev_cents_text), "%s", cents_text);
     prev_feedback_width = feedback_width;
