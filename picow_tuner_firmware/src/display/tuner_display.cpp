@@ -33,6 +33,12 @@ void tuner_display::init()
     // Reset screen to black
     lcd::fill(0x0000);
 
+    // Paint divider between current and target frequency once
+    lcd::fill_rect(120-2, 200, 4, 30, 0xc618); 
+    // Draw center of tuning feedback bar once
+    lcd::fill_rect(120-4, 50, 8, 60, 0xFFFF);
+
+
     // Reset cached values
     prev_valid = false;
     prev_clipping = false;
@@ -114,7 +120,7 @@ void tuner_display::update(const TuningFeedback& feedback, bool clipping)
     constexpr float exponent = 0.5f;
     float normalized = std::clamp(cents_error / 50.0f, -1.0f, 1.0f);
     float magnitude = std::pow(std::abs(normalized), exponent);
-    int feedback_width = static_cast<int>(std::lround(110.0f * std::copysign(magnitude, normalized)));
+    int feedback_width = static_cast<int>(std::lround(106.0f * std::copysign(magnitude, normalized)));
 
     // Only redraw if feedback bar width has changed
     if (prev_feedback_width != feedback_width)
@@ -122,12 +128,11 @@ void tuner_display::update(const TuningFeedback& feedback, bool clipping)
         constexpr int feedback_y_offset = 50;
         constexpr int feedback_height = 60;
         // Clear old feedback
-        lcd::fill_rect(5, feedback_y_offset, 230, feedback_height, 0x0000);
+        lcd::fill_rect(5, feedback_y_offset, 120-4-5, feedback_height, 0x0000);
+        lcd::fill_rect(120+4, feedback_y_offset, 120-4-5, feedback_height, 0x0000);
         // Draw feedback bar
-        int feedback_x_offset = (feedback_width < 0) ? 120 + feedback_width : 120;
+        int feedback_x_offset = (feedback_width < 0) ? 120-4 + feedback_width : 120+4;
         lcd::fill_rect(feedback_x_offset, feedback_y_offset, std::abs(feedback_width), feedback_height, 0xf800);
-        // Draw center bar
-        lcd::fill_rect(120-4, feedback_y_offset, 8, feedback_height, 0xFFFF);
     }
 
 
@@ -209,8 +214,8 @@ void tuner_display::update(const TuningFeedback& feedback, bool clipping)
         lcd::draw_string(120+2+5, frequency_y_offset+8, target_text, 0xc618, 0x0000, 2);
     }
 
-    // Paint divider between current and target frequency
-    lcd::fill_rect(120-2, frequency_y_offset, 4, 30, 0xc618);    
+    // // Paint divider between current and target frequency
+    // lcd::fill_rect(120-2, frequency_y_offset, 4, 30, 0xc618);    
     
 
     /* Update cached values */
