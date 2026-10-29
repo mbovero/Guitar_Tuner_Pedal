@@ -75,10 +75,16 @@ namespace
     char prev_target_text[10] = {};
 }
 
-// Initialize the panel, draw static elements, and reset the display cache
+// Initialize LCD hardware once and display tuning feedback
 void tuner_display::init()
 {
     lcd::init();
+    show();
+}
+
+// Restore the tuning feedback layout and reset cached display values
+void tuner_display::show()
+{
     lcd::fill(background_color);
 
     // Draw the bar separating current and target frequency once
@@ -92,7 +98,7 @@ void tuner_display::init()
         feedback_height,
         text_color);
 
-    // The font maps ASCII 'c' to the cents symbol, drawn once per initialization
+    // The font maps ASCII 'c' to the cents symbol, drawn once
     lcd::draw_char(
         cents_symbol_x, cents_y_offset, 'c',
         text_color, background_color, cents_scale);

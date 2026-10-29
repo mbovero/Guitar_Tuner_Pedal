@@ -5,5 +5,6 @@
 namespace tuner_display
 {
     void init();
+    void show();
     void update(const TuningFeedback& feedback, bool clipping);
 }
