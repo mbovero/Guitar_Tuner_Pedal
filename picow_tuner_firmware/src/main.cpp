@@ -13,11 +13,15 @@
 #include "tuning/tuning_feedback.hpp"
 #include "filters/hum_filter.hpp"
 #include "display/tuner_display.hpp"
+#include "input/buttons.hpp"
 
 
 int main()
 {
     stdio_init_all();
+
+    // Configure menu inputs and reset gesture tracking
+    initialize_buttons();
 
     // Configure ADC, DMA, and queue for continuous input signal frame acquisition
     initialize_sample_input();
@@ -78,6 +82,28 @@ int main()
     // Main while loop
     while (true)
     {
+        // Read button events even when acquisition is paused
+        const ButtonEvent button_event = poll_buttons();
+        switch (button_event)
+        {
+            case ButtonEvent::LeftClick:
+                DEBUG_PRINT("Left click \n");
+                break;
+            
+            case ButtonEvent::RightClick:
+                DEBUG_PRINT("Right click \n");
+                break;
+
+            case ButtonEvent::BothPressed:
+                DEBUG_PRINT("Both pressed \n");
+                break;
+
+            case ButtonEvent::None:
+                break;
+        }
+
+
+
         // Temp serial controls for testing acquisition pause and resume
         const int command = stdio_getchar_timeout_us(0);
 

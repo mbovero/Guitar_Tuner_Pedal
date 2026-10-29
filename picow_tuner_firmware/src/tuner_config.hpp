@@ -10,8 +10,8 @@ inline constexpr int32_t midpoint_adc = 2093;
 
 namespace SampleInputConfig
 {
-    // ADC sampling rate (Hz)
-    inline constexpr uint32_t sample_rate_hz = 7680;
+    // Evenly divisible by 60 for Hum filter compatibility
+    inline constexpr uint32_t sample_rate_hz = 7680;    // ADC sampling rate (Hz)
     // Number of ADC samples in one frame
     inline constexpr size_t frame_sample_count = 1024;
 
@@ -60,4 +60,14 @@ namespace ProcessedSampleLimits
     inline constexpr int32_t minimum = -8192;
     // Maximum allowed value for a filtered ADC sample
     inline constexpr int32_t maximum = 8191;
+}
+
+namespace ButtonInputConfig
+{
+    // Active-low menu inputs with internal pull-ups
+    inline constexpr unsigned left_gpio = 14;
+    inline constexpr unsigned right_gpio = 15;
+
+    // Input must remain unchanged for this long before being accepted (debouncing)
+    inline constexpr uint32_t debounce_ms = 25;
 }

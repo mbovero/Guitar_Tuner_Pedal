@@ -37,6 +37,7 @@ pico_sdk_init()
 add_executable(picow_tuner_firmware 
     src/main.cpp
     src/input/adc_input.cpp
+    src/input/buttons.cpp
     src/frequency/yin_estimator.cpp
     src/filters/hum_filter.cpp
     src/tuning/tuning_feedback.cpp
