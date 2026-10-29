@@ -18,34 +18,6 @@
 #include "tuner_settings.hpp"
 #include "ui/menu_controller.hpp"
 
-/*
- * Prints menu state while the LCD menu is under development
- */
-void print_menu_state(const MenuState& state)
-{
-    // Names follow the corresponding enum declaration order
-    constexpr const char* item_names[] = {
-        "FILTER",
-        "A4 REFERENCE",
-        "RETURN TO TUNER"
-    };
-
-    constexpr const char* filter_names[] = {
-        "OFF",
-        "50 HZ",
-        "60 HZ"
-    };
-
-    DEBUG_PRINT(
-        "\nMenu: %s\n"
-        "Selected: %s\n"
-        "Filter: %s\n"
-        "A4 reference: %u Hz\n",
-        state.editing ? "EDITING" : "BROWSING",
-        item_names[static_cast<unsigned>(state.selected_item)],
-        filter_names[static_cast<unsigned>(state.settings.filter_mode)],
-        static_cast<unsigned>(state.settings.a4_frequency_hz));
-}
 
 int main()
 {
@@ -67,13 +39,11 @@ int main()
     // Made static to keep array out of normal stack
     static SampleFrame frame{}; // The current frame of ADC samples being processed
 
-    // Configure filter
-    static HumCombFilter comb;
-    if (!comb.configure(
-            SampleInputConfig::sample_rate_hz,
-            HumFilterConfig::notch_bandwidth_hz))
+    // Configure hum filter modes
+    static HumFilter hum_filter;
+    if (!hum_filter.configure())
     {
-        panic("Failed to configure hum comb filter");
+        panic("Failed to configure hum filters");
     }
 
     // Initialize feedback display
@@ -85,21 +55,8 @@ int main()
     // Array to hold filtered ADC samples
     static std::array<int16_t, SampleInputConfig::frame_sample_count> filtered_samples{};
 
-    // Filter control variables
-    // Notch filters toggle
-    bool filter_enabled = true;
     // Whether the notch filters have been initialized and have usable history
     bool filter_initialized = false;
-
-
-    DEBUG_PRINT(
-    "Sample rate: %lu Hz, expected frame: %.1f us, comb delay: %u samples \n",
-    static_cast<unsigned long>(SampleInputConfig::sample_rate_hz),
-    SampleInputConfig::expected_frame_time_us,
-    static_cast<unsigned>(HumFilterConfig::delay_samples));
-
-    // Begin input signal frame acquisition
-    start_sample_input();
 
     // Settings accepted when returning from menu
     TunerSettings selected_settings{};
@@ -118,6 +75,20 @@ int main()
     // Whether the application is currently displaying the menu
     bool menu_open = false;
 
+    // Apply the initial filter selection before acquisition begins
+    hum_filter.set_mode(selected_settings.filter_mode);
+
+    DEBUG_PRINT(
+        "Sample rate: %lu Hz, expected frame: %.1f us\n"
+        "Comb delays: 50 Hz=%u samples, 60 Hz=%u samples\n",
+        static_cast<unsigned long>(SampleInputConfig::sample_rate_hz),
+        SampleInputConfig::expected_frame_time_us,
+        static_cast<unsigned>(HumFilterConfig::delay_50_samples),
+        static_cast<unsigned>(HumFilterConfig::delay_60_samples));
+
+    // Begin input signal frame acquisition
+    start_sample_input();
+
 
     // Main while loop
     while (true)
@@ -133,9 +104,6 @@ int main()
             if (action == MenuAction::Redraw)
             {
                 menu_display::update(menu.state());
-
-                // TODO remove
-                print_menu_state(menu.state());
             }
             else if (action == MenuAction::ReturnToTuner)
             {
@@ -144,6 +112,9 @@ int main()
 
                 // Apply the selected reference frequency to note mapping and cents calculation
                 tuning_config.a4_frequency_hz = static_cast<float>(selected_settings.a4_frequency_hz);
+
+                // Select the filter while acquisition is stopped
+                hum_filter.set_mode(selected_settings.filter_mode);
 
                 // Require fresh filter history and feedback after the pause
                 filter_initialized = false;
@@ -182,8 +153,6 @@ int main()
             // Replace the tuner screen with the complete menu
             menu_display::show(menu.state());
 
-            print_menu_state(menu.state()); //TODO remove
-
             // Skip the tuner pipeline on the menu entry iteration
             continue;
         }
@@ -200,8 +169,7 @@ int main()
         // Initialize default filtered frame stats
         FilteredFrameStats filtered_stats{};
 
-        // Check if filter is currently enabled
-        const bool use_filter = filter_enabled;
+        const bool use_filter = hum_filter.enabled();
 
         // Initialize total filtering time
         uint32_t filter_time_us = 0;
@@ -224,31 +192,39 @@ int main()
                 centered_samples[i] = static_cast<int16_t>(centered);
             }
 
-            // If filter has not been initialized, or if a discontinuity occurred, reinitialize it
-            if (!filter_initialized || frame.discontinuous)
+            // Only filter if enabled
+            if (use_filter)
             {
-                // Reset the notch filter using an estimated baseline as the initial value
-                const double initial_value = static_cast<double>(frame.mean_adc) - static_cast<double>(midpoint_adc);
-                comb.reset(initial_value);
+                // If filter has not been initialized, or if a discontinuity occurred, reinitialize it
+                if (!filter_initialized || frame.discontinuous)
+                {
+                    // Reset the notch filter using an estimated baseline as the initial value
+                    const double initial_value = static_cast<double>(frame.mean_adc) - static_cast<double>(midpoint_adc);
+                    hum_filter.reset(initial_value);
 
-                // Mark filter as initialized
-                filter_initialized = true;
+                    // Mark filter as initialized
+                    filter_initialized = true;
+                }
+
+                // Record current timestamp to measure time spent filtering
+                const uint32_t filter_start_us = time_us_32();
+                // Filter this frame and record filtered frame statistics
+                filtered_stats = hum_filter.filter_frame(
+                    centered_samples.data(),
+                    filtered_samples.data(),
+                    centered_samples.size());
+                // Calculate total filtering time
+                filter_time_us = time_us_32() - filter_start_us;
+
+                // If filtered results are invalid, require filter to be reset
+                if (!filtered_stats.valid)
+                {
+                    filter_initialized = false;
+                }
             }
-
-            // Record current timestamp to measure time spent filtering
-            const uint32_t filter_start_us = time_us_32();
-            // Filter this frame and record filtered frame statistics
-            filtered_stats = filter_frame(
-                comb,
-                centered_samples.data(),
-                filtered_samples.data(),
-                centered_samples.size());
-            // Calculate total filtering time
-            filter_time_us = time_us_32() - filter_start_us;
-
-            // If filtered results are invalid, require filter to be reset
-            if (!filtered_stats.valid)
+            else
             {
+                // Do not maintain comb filter history while filter is bypassed
                 filter_initialized = false;
             }
         }
