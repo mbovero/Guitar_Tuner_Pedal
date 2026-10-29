@@ -43,6 +43,7 @@ add_executable(picow_tuner_firmware
     src/tuning/tuning_feedback.cpp
     src/display/lcd_st7789.cpp
     src/display/tuner_display.cpp
+    src/ui/menu_controller.cpp
 )
 
 target_compile_definitions(picow_tuner_firmware PRIVATE

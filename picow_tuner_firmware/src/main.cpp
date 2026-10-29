@@ -10,11 +10,41 @@
 #include "tuner_config.hpp"
 #include "frequency/yin_estimator.hpp"
 #include "input/adc_input.hpp"
+#include "input/buttons.hpp"
 #include "tuning/tuning_feedback.hpp"
 #include "filters/hum_filter.hpp"
 #include "display/tuner_display.hpp"
-#include "input/buttons.hpp"
+#include "tuner_settings.hpp"
+#include "ui/menu_controller.hpp"
 
+/*
+ * Prints menu state while the LCD menu is under development
+ */
+void print_menu_state(const MenuState& state)
+{
+    // Names follow the corresponding enum declaration order
+    constexpr const char* item_names[] = {
+        "FILTER",
+        "A4 REFERENCE",
+        "RETURN TO TUNER"
+    };
+
+    constexpr const char* filter_names[] = {
+        "OFF",
+        "50 HZ",
+        "60 HZ"
+    };
+
+    DEBUG_PRINT(
+        "\nMenu: %s\n"
+        "Selected: %s\n"
+        "Filter: %s\n"
+        "A4 reference: %u Hz\n",
+        state.editing ? "EDITING" : "BROWSING",
+        item_names[static_cast<unsigned>(state.selected_item)],
+        filter_names[static_cast<unsigned>(state.settings.filter_mode)],
+        static_cast<unsigned>(state.settings.a4_frequency_hz));
+}
 
 int main()
 {
@@ -78,53 +108,68 @@ int main()
     // Most recent tuning feedback
     TuningFeedback latest_feedback{};
 
+    // Settings accepted when returning from menu
+    TunerSettings selected_settings{};
+    // Menu navigation and working settings
+    MenuController menu;
+    // Whether the application is currently displaying the menu
+    bool menu_open = false;
+
 
     // Main while loop
     while (true)
     {
-        // Read button events even when acquisition is paused
+        // Always poll inputs
         const ButtonEvent button_event = poll_buttons();
-        switch (button_event)
+
+        // If the menu is open, handle user interactions; stop signal processing, feedback, etc.
+        if (menu_open)
         {
-            case ButtonEvent::LeftClick:
-                DEBUG_PRINT("Left click \n");
-                break;
-            
-            case ButtonEvent::RightClick:
-                DEBUG_PRINT("Right click \n");
-                break;
+            const MenuAction action = menu.handle_event(button_event);
 
-            case ButtonEvent::BothPressed:
-                DEBUG_PRINT("Both pressed \n");
-                break;
+            if (action == MenuAction::Redraw)
+            {
+                print_menu_state(menu.state());
+            }
+            else if (action == MenuAction::ReturnToTuner)
+            {
+                // Retain the accepted selections
+                selected_settings = menu.state().settings;
 
-            case ButtonEvent::None:
-                break;
+                // Require fresh filter history and feedback after the pause
+                filter_initialized = false;
+                latest_feedback = {};
+
+                menu_open = false;
+                start_sample_input();
+
+                DEBUG_PRINT("Returned to tuner\n");
+            }
+
+            // While the menu is open, only run input and menu handling
+            // After exiting, begin sample processing on the next iteration
+            continue;
         }
 
-
-
-        // Temp serial controls for testing acquisition pause and resume
-        const int command = stdio_getchar_timeout_us(0);
-
-        if (command == 'p')
+        if (button_event == ButtonEvent::BothPressed)
         {
+            // Stop capture and discard samples from before menu entry
             stop_sample_input();
 
-            // Clear processing and displayed feedback from before the pause
+            // Clear feedback that no longer represents current measurement
             filter_initialized = false;
             latest_feedback = {};
             tuner_display::update(latest_feedback, false);
 
-            DEBUG_PRINT("Acquisition paused\n");
-        }
-        else if (command == 'r')
-        {
-            start_sample_input();
+            // Begin browsing with a copy of the accepted settings
+            menu.open(selected_settings);
+            menu_open = true;
 
-            DEBUG_PRINT("Acquisition running\n");
-        }
+            print_menu_state(menu.state());
 
+            // Skip the tuner pipeline on the menu-entry iteration
+            continue;
+        }
 
         // Attempt to retrieve a sample frame
         if(!try_get_sample_frame(frame))
