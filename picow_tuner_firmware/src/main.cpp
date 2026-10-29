@@ -101,16 +101,18 @@ int main()
     // Begin input signal frame acquisition
     start_sample_input();
 
+    // Settings accepted when returning from menu
+    TunerSettings selected_settings{};
     // Create tuning feedback config
-    const TuningConfig tuning_config {
-        440.0f, // Modern standard pitch (A4 = 440 Hz)
+    TuningConfig tuning_config 
+    {
+        static_cast<float>(selected_settings.a4_frequency_hz), 
         1.0f    // +/- range from target pitch that is considered "In Tune"
     };
+
     // Most recent tuning feedback
     TuningFeedback latest_feedback{};
 
-    // Settings accepted when returning from menu
-    TunerSettings selected_settings{};
     // Menu navigation and working settings
     MenuController menu;
     // Whether the application is currently displaying the menu
@@ -139,6 +141,9 @@ int main()
             {
                 // Retain the accepted selections
                 selected_settings = menu.state().settings;
+
+                // Apply the selected reference frequency to note mapping and cents calculation
+                tuning_config.a4_frequency_hz = static_cast<float>(selected_settings.a4_frequency_hz);
 
                 // Require fresh filter history and feedback after the pause
                 filter_initialized = false;
