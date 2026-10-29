@@ -51,8 +51,11 @@ namespace
 
     // Index into dma_frames marking the block currently being written into by DMA
     unsigned active_buffer = 0;
-    // Whether input signal capturing via DMA has begun
-    bool running = false;
+
+    // Whether input signal capturing via DMA has begun; shared between main loop and DMA interrupt handler
+    volatile bool running = false;
+    // Whether the next delivered frame begins a fresh capture session (helps track continuity)
+    bool first_frame_after_start = true;
 
     // Whether the previous block experienced a FIFO overflow
     bool previous_fifo_overflow = false;
@@ -164,6 +167,12 @@ namespace
 
         // Clear interrupt flag
         dma_channel_acknowledge_irq0(channel);
+
+        // Ignore completions when acquisition has stopped
+        if (!running)
+        {
+            return;
+        }
 
         // Store the index of the completed DMA block
         const unsigned completed_index = active_buffer;
@@ -315,14 +324,13 @@ void initialize_sample_input()
     irq_set_exclusive_handler(DMA_IRQ_0, dma_irq_handler);
     // Set DMA_IRQ_0 priority at highest to reduce/prevent overflows
     irq_set_priority(DMA_IRQ_0, PICO_HIGHEST_IRQ_PRIORITY);
-    // Enable DMA_IRQ_0 triggering on this channel
-    dma_channel_set_irq0_enabled(channel, true);
-    // Enable the DMA_IRQ_0 IRQ
-    irq_set_enabled(DMA_IRQ_0, true);
+    // Leave interrupts disabled until acquisition starts
+    dma_channel_set_irq0_enabled(channel, false);
+    irq_set_enabled(DMA_IRQ_0, false);
 }
 
 /*
- * Begins continuous acquisition of ADC samples using DMA. Should only be ran once.
+ * Begins or resumes continuous acquisition of ADC samples using existing hardware configuration.
  */
 void start_sample_input()
 {
@@ -337,17 +345,98 @@ void start_sample_input()
     {
         return;
     }
-    // Otherwise, start a new capture
+
+    const unsigned channel = static_cast<unsigned>(dma_channel);
+
+    // Keep completion handling disabled while preparing capture
+    irq_set_enabled(DMA_IRQ_0, false);
+    dma_channel_set_irq0_enabled(channel, false);
+
+    // Ensure the first transfer receives only fresh samples
+    adc_run(false);
+    adc_fifo_drain();
+
+    // Clear old FIFO and DMA flags
+    hw_set_bits(&adc_hw->fcs, ADC_FCS_OVER_BITS | ADC_FCS_UNDER_BITS);
+
+    dma_channel_acknowledge_irq0(channel);
+
+    // Begin each capture session with the first DMA buffer
+    active_buffer = 0;
+
+    // Clear continuity information from previous session
+    previous_fifo_overflow = false;
+    last_delivered_sequence = capture_sequence;
+    first_frame_after_start = true;
+
+    // Restore the beginning of the destination buffer
+    dma_channel_set_write_addr(
+        channel,
+        dma_frames[active_buffer].samples.data(),
+        false);
+    // Restore the full frame length; do not start transfer immediately
+    dma_channel_set_transfer_count(
+        channel,
+        static_cast<uint32_t>(SampleInputConfig::frame_sample_count),
+        false);
+
+    // Mark acquisition as active before enabling the handler
     running = true;
+
+    // Allow this channel to report completed frames
+    dma_channel_set_irq0_enabled(channel, true);
+    irq_set_enabled(DMA_IRQ_0, true);
 
     // Record timestamp for tracking capture duration
     last_completion_us = time_us_32();
 
     // Begin DMA transfer on configured channel
-    dma_start_channel_mask(1u << static_cast<unsigned>(dma_channel));
+    dma_start_channel_mask(1u << channel);
 
     // Begin ADC sampling
     adc_run(true);
+}
+
+/* 
+ * Stops ADC frame acquisition; discards queued frames and partial captures.
+ */
+void stop_sample_input()
+{
+    // Don't stop anything if it hasn't been initialized
+    if (dma_channel < 0)
+    {
+        return;
+    }
+
+    const unsigned channel = static_cast<unsigned>(dma_channel);
+
+    // Prevent interrupt handler from running while acquisition state changes
+    irq_set_enabled(DMA_IRQ_0, false);
+
+    // Prevent this channel from generating completion interrupts
+    dma_channel_set_irq0_enabled(channel, false);
+
+    // Prevent any later completion from rearming DMA
+    running = false;
+
+    // Stop requesting new ADC conversions
+    adc_run(false);
+
+    // Abort the current DMA transfer and discard the partial capture
+    dma_channel_abort(channel);
+    // Clear normal or abort-related completion status
+    dma_channel_acknowledge_irq0(channel);
+
+    // Drain any remaining ADC conversion and discard FIFO
+    adc_fifo_drain();
+
+    // Clear overflow and underflow flags
+    hw_set_bits(&adc_hw->fcs, ADC_FCS_OVER_BITS | ADC_FCS_UNDER_BITS);
+
+    // Discard completed frames that have not reached the main loop
+    while (queue_try_remove(&completed_frame_queue, &processing_frame))
+    {
+    }
 }
 
 /*
@@ -379,9 +468,12 @@ bool try_get_sample_frame(SampleFrame& frame)
 
     // Continuity was broken if sequence number is out of line or capture was invalid
     frame.discontinuous = 
+        first_frame_after_start ||
         frame.sequence_number != (last_delivered_sequence + 1u) ||
         !frame.capture_valid;
 
+    // Track when first frame after starting acquisition has been delivered
+    first_frame_after_start = false;
     // Update the last delivered sequence number
     last_delivered_sequence = frame.sequence_number;
 
