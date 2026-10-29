@@ -24,5 +24,5 @@ namespace ReferencePitchLimits
 struct TunerSettings
 {
     FilterMode filter_mode = FilterMode::Hz60;
-    uint16_t a4_frequency_hz = 440;
+    uint16_t a4_frequency_hz = 440; // Modern standard pitch (A4 = 440 Hz)
 };
