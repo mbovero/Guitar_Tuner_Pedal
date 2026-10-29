@@ -10,8 +10,8 @@ inline constexpr int32_t midpoint_adc = 2093;
 
 namespace SampleInputConfig
 {
-    // Evenly divisible by 60 for Hum filter compatibility
-    inline constexpr uint32_t sample_rate_hz = 7680;    // ADC sampling rate (Hz)
+    // Fixed rate supports integer comb delays for both 60 Hz and 50 Hz hum frequencies
+    inline constexpr uint32_t sample_rate_hz = 9600;    // ADC sampling rate (Hz)
     // Number of ADC samples in one frame
     inline constexpr size_t frame_sample_count = 1024;
 
@@ -29,25 +29,20 @@ namespace SampleInputConfig
 
 namespace HumFilterConfig
 {
-    // The filter attenuates this frequency and every integer multiple of it
-    inline constexpr uint32_t fundamental_hz = 60;
-    // The full width between each notch's -3 dB points, measured in Hz
+    // Full width between each notch's -3 dB points
     inline constexpr double notch_bandwidth_hz = 2.0;
 
     static_assert(
-        fundamental_hz > 0,
-        "Hum frequency must be positive");
-    
-    static_assert(
-        SampleInputConfig::sample_rate_hz % fundamental_hz == 0,
-        "Integer comb requires sample rate to be a multiple of hum frequency");
+        SampleInputConfig::sample_rate_hz % 50u == 0 &&
+        SampleInputConfig::sample_rate_hz % 60u == 0,
+        "Sample rate must support integer delays for both hum frequencies");
 
-    // Period of the fundamental frequency in samples; used for delay in filter difference equation
-    inline constexpr size_t delay_samples = SampleInputConfig::sample_rate_hz / fundamental_hz;
+    inline constexpr size_t delay_50_samples = SampleInputConfig::sample_rate_hz / 50u;
+    inline constexpr size_t delay_60_samples = SampleInputConfig::sample_rate_hz / 60u;
 
     static_assert(
-        delay_samples >= 2,
-        "Comb requires at least two samples per hum cycle");
+        delay_50_samples >=2 && delay_60_samples >= 2,
+        "Comb delays must be at least two samples");
 }
 
 namespace ProcessedSampleLimits
