@@ -78,6 +78,28 @@ int main()
     // Main while loop
     while (true)
     {
+        // Temp serial controls for testing acquisition pause and resume
+        const int command = stdio_getchar_timeout_us(0);
+
+        if (command == 'p')
+        {
+            stop_sample_input();
+
+            // Clear processing and displayed feedback from before the pause
+            filter_initialized = false;
+            latest_feedback = {};
+            tuner_display::update(latest_feedback, false);
+
+            DEBUG_PRINT("Acquisition paused\n");
+        }
+        else if (command == 'r')
+        {
+            start_sample_input();
+
+            DEBUG_PRINT("Acquisition running\n");
+        }
+
+
         // Attempt to retrieve a sample frame
         if(!try_get_sample_frame(frame))
         {
