@@ -14,6 +14,7 @@
 #include "tuning/tuning_feedback.hpp"
 #include "filters/hum_filter.hpp"
 #include "display/tuner_display.hpp"
+#include "display/menu_display.hpp"
 #include "tuner_settings.hpp"
 #include "ui/menu_controller.hpp"
 
@@ -129,6 +130,9 @@ int main()
 
             if (action == MenuAction::Redraw)
             {
+                menu_display::update(menu.state());
+
+                // TODO remove
                 print_menu_state(menu.state());
             }
             else if (action == MenuAction::ReturnToTuner)
@@ -140,6 +144,12 @@ int main()
                 filter_initialized = false;
                 latest_feedback = {};
 
+                // Restore tuner feedback layout and invalidate previous display cache
+                tuner_display::show();
+                // Show idle feedback while waiting for a fresh estimate
+                tuner_display::update(latest_feedback, false);
+
+                // Finish drawing before restarting acquisition
                 menu_open = false;
                 start_sample_input();
 
@@ -153,21 +163,23 @@ int main()
 
         if (button_event == ButtonEvent::BothPressed)
         {
-            // Stop capture and discard samples from before menu entry
+            // Stop acquisition before drawing menu
             stop_sample_input();
 
             // Clear feedback that no longer represents current measurement
             filter_initialized = false;
             latest_feedback = {};
-            tuner_display::update(latest_feedback, false);
 
             // Begin browsing with a copy of the accepted settings
             menu.open(selected_settings);
             menu_open = true;
 
-            print_menu_state(menu.state());
+            // Replace the tuner screen with the complete menu
+            menu_display::show(menu.state());
 
-            // Skip the tuner pipeline on the menu-entry iteration
+            print_menu_state(menu.state()); //TODO remove
+
+            // Skip the tuner pipeline on the menu entry iteration
             continue;
         }
 
