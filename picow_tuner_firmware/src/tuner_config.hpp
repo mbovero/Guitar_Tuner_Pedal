@@ -66,3 +66,15 @@ namespace ButtonInputConfig
     // Input must remain unchanged for this long before being accepted (debouncing)
     inline constexpr uint32_t debounce_ms = 25;
 }
+
+namespace FootswitchConfig
+{
+    // Active-low input with an internal pull-up
+    inline constexpr unsigned gpio = 13;
+
+    // Duration of an accepted press before reporting a hold
+    inline constexpr uint32_t  hold_ms = 1000;
+
+    // Poll briefly while deboune or a held gesture is in progress
+    inline constexpr uint32_t poll_interval_ms = 5;
+}
