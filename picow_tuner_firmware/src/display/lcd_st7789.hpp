@@ -39,4 +39,8 @@ namespace lcd
         uint16_t foreground,
         uint16_t background,
         uint8_t scale = 1);
+
+    void set_backlight(bool enabled);
+    void sleep();
+    void wake();
 }

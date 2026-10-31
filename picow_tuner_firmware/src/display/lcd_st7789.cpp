@@ -16,8 +16,12 @@ namespace
     constexpr uint pin_cs = 17;     // Chip select GPIO #   (CS)
     constexpr uint pin_dc = 16;     // Command/Data GPIO #  (DC)
     constexpr uint pin_rst = 20;    // Reset GPIO #         (RST)
+    constexpr uint pin_bl = 21;     // Backlight GPIO #     (BL)
 
     constexpr uint spi_baudrate = 62'000'000;
+
+    // Tracks whether the controller has entered sleep mode
+    bool panel_sleeping = false;
 
     // Helper function that configures the provided GPIO pin as an output with the specified initial_level
     void init_output(uint pin, bool initial_level)
@@ -33,6 +37,7 @@ namespace
         init_output(pin_cs, true);  // Deselect LDC controller chip initially
         init_output(pin_dc, true);  // Not sending commands initially
         init_output(pin_rst, true); // Don't reset
+        init_output(pin_bl, false); // Initially disable backlight
 
         // Initialize SPI peripheral
         spi_init(spi0, spi_baudrate);
@@ -254,12 +259,15 @@ namespace
     }
 }
 
-// Initializes bus to communicate with LCD driver, then resets and configures the panel
+// Initializes bus to communicate with LCD driver, then resets, configures, and enables the panel
 void lcd::init()
 {
     init_bus();
     reset_panel();
     configure_panel();
+
+    panel_sleeping = false;
+    set_backlight(true);
 }
 
 /*
@@ -436,4 +444,44 @@ void lcd::draw_string(
         cursor_x += advance;    // Advance character spacing
         ++text; // Move to next character
     }
+}
+
+// Control the backlight without changing display memory
+void lcd::set_backlight(bool enabled)
+{
+    gpio_put(pin_bl, enabled);
+}
+
+// Stop panel scanning and turn off the backlight
+void lcd::sleep()
+{
+    set_backlight(false);
+    
+    if (panel_sleeping)
+    {
+        return;
+    }
+
+    write_command(0x28);    // Display off
+    write_command(0x10);    // Sleep in (minimum power consumption mode)
+    sleep_ms(120);
+
+    panel_sleeping = true;
+}
+
+// Wake the panel while leaving the backlight off for screen restoration
+void lcd::wake()
+{
+    if (!panel_sleeping)
+    {
+        return;
+    }
+
+    write_command(0x11);    // Sleep out
+    sleep_ms(120);
+
+    write_command(0x29);    // Display on
+    sleep_ms(20);
+
+    panel_sleeping = false;
 }
