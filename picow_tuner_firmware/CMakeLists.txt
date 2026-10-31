@@ -47,6 +47,24 @@ add_executable(picow_tuner_firmware
     src/ui/menu_controller.cpp
 )
 
+# Reserve the final two flash sectors for persistent settings
+pico_add_linker_script_override_path(
+    picow_tuner_firmware
+    "${CMAKE_CURRENT_LIST_DIR}/linker"
+    FILES memory_flash.incl
+)
+
+# Flash programming and safe execution support
+target_link_libraries(picow_tuner_firmware
+    hardware_flash
+    pico_flash
+)
+
+# Current firmware runs entirely on score 0
+target_compile_definitions(picow_tuner_firmware PRIVATE
+    PICO_FLASH_ASSUME_CORE1_SAFE=1
+)
+
 target_compile_definitions(picow_tuner_firmware PRIVATE
     TUNER_DEBUG=1
 )
