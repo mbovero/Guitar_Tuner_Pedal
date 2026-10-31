@@ -15,9 +15,34 @@
 #include "filters/hum_filter.hpp"
 #include "display/tuner_display.hpp"
 #include "display/menu_display.hpp"
+#include "display/lcd_st7789.hpp"
 #include "tuner_settings.hpp"
 #include "ui/menu_controller.hpp"
 
+namespace
+{
+    enum class PowerMode
+    {
+        On,
+        Idle,
+        Off
+    };
+
+    // Draw once on entry to Idle
+    void show_idle_screen()
+    {
+        constexpr uint16_t background = 0x0000;
+        constexpr uint16_t foreground = 0xFFFF;
+        constexpr uint16_t secondary = 0xC618;
+
+        lcd::fill(background);
+
+        lcd::draw_string(60, 70, "TUNER", foreground, background, 4);
+        lcd::draw_string(84, 120, "IDLE", secondary, background, 3);
+
+        lcd::draw_string(72, 200, "PRESS FOOTSWITCH", secondary, background, 1);
+    }
+}
 
 int main()
 {
@@ -75,6 +100,56 @@ int main()
     // Whether the application is currently displaying the menu
     bool menu_open = false;
 
+    PowerMode power_mode = PowerMode::On;
+    // Apply each transition in one place while acquisition is stopped
+    auto set_power_mode = [&](PowerMode next_mode)
+    {
+        if (next_mode == power_mode)
+        {
+            return;
+        }
+
+        stop_sample_input();
+
+        // A mode change closes the menu without accepting pending edits
+        menu_open = false;
+        filter_initialized = false;
+        latest_feedback = {};
+
+        lcd::set_backlight(false);
+        power_mode = next_mode;
+
+        if (power_mode == PowerMode::Off)
+        {
+            lcd::sleep();
+            return;
+        }
+
+        // Wake LCD for On and Idle modes
+        lcd::wake();
+
+        if (power_mode == PowerMode::On)
+        {
+            reset_menu_buttons();
+
+            tuner_display::show();
+            tuner_display::update(latest_feedback, false);
+        }
+        else    // Idle mode
+        {
+            show_idle_screen();
+        }
+
+        // Enable backlight after display is updated for On and Idle modes
+        lcd::set_backlight(true);
+
+        // Resume input processing only after display is on for On mode
+        if (power_mode == PowerMode::On)
+        {
+            start_sample_input();
+        }
+    };
+
     // Apply the initial filter selection before acquisition begins
     hum_filter.set_mode(selected_settings.filter_mode);
 
@@ -93,7 +168,44 @@ int main()
     // Main while loop
     while (true)
     {
-        // Always poll inputs
+        /* Handle footswitch events and power mode switching before menu or sample processing */
+        const FootswitchEvent footswitch_event = poll_footswitch();
+
+        // If footswitch pressed while Off, turn back On
+        if (power_mode == PowerMode::Off)
+        {
+            if (footswitch_event == FootswitchEvent::Pressed)
+            {
+                // Do not produce an extra click or hold event
+                consume_footswitch_press();
+                set_power_mode(PowerMode::On);
+                continue;
+            }
+        }
+        else if (footswitch_event == FootswitchEvent::Held)   // If footswitch held in On or Idle, turn Off
+        {
+            consume_footswitch_press();
+            set_power_mode(PowerMode::Off);
+            continue;
+        }
+        else if (footswitch_event == FootswitchEvent::Click)    // If footswitch clicked in On or Idle, toggle between modes
+        {
+            set_power_mode(
+                power_mode == PowerMode::On
+                    ? PowerMode::Idle
+                    : PowerMode::On);
+            continue;
+        }
+
+        // In Off and Idle modes, put processor to sleep and poll footswitch input
+        if (power_mode != PowerMode::On)
+        {
+            wait_for_footswitch();
+            continue;   // Idle and Off skip tuner pipeline
+        }
+
+
+        /* Poll button inputs before processing sample frames */
         const ButtonEvent button_event = poll_buttons();
 
         // If the menu is open, handle user interactions; stop signal processing, feedback, etc.
@@ -157,6 +269,7 @@ int main()
             continue;
         }
 
+        /* Process sample frames and display feedback */
         // Attempt to retrieve a sample frame
         if(!try_get_sample_frame(frame))
         {
