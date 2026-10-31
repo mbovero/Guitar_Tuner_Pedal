@@ -72,7 +72,8 @@ target_link_libraries(picow_tuner_firmware
         hardware_irq
         hardware_clocks
         hardware_spi
-        )
+        hardware_sync
+)
 
 pico_add_extra_outputs(picow_tuner_firmware)
 
