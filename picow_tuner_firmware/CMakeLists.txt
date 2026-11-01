@@ -46,6 +46,7 @@ add_executable(picow_tuner_firmware
     src/display/menu_display.cpp
     src/ui/menu_controller.cpp
     src/storage/settings_storage.cpp
+    src/assets/idle_gus.cpp
 )
 
 # Reserve the final two flash sectors for persistent settings

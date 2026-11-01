@@ -19,6 +19,7 @@
 #include "tuner_settings.hpp"
 #include "ui/menu_controller.hpp"
 #include "storage/settings_storage.hpp"
+#include "assets/idle_gus.hpp"
 
 namespace
 {
@@ -32,16 +33,7 @@ namespace
     // Draw once on entry to Idle
     void show_idle_screen()
     {
-        constexpr uint16_t background = 0x0000;
-        constexpr uint16_t foreground = 0xFFFF;
-        constexpr uint16_t secondary = 0xC618;
-
-        lcd::fill(background);
-
-        lcd::draw_string(60, 70, "TUNER", foreground, background, 4);
-        lcd::draw_string(84, 120, "IDLE", secondary, background, 3);
-
-        lcd::draw_string(72, 200, "PRESS FOOTSWITCH", secondary, background, 1);
+        lcd::draw_image_rgb565(idle_image::pixels, idle_image::byte_count);
     }
 }
 
