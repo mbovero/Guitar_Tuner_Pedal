@@ -228,7 +228,7 @@ void wait_for_footswitch()
 
     const bool needs_polling =
         footswitch.stable_pressed ||
-        footswitch.raw_changed_ms != footswitch.stable_pressed ||
+        footswitch.raw_pressed != footswitch.stable_pressed ||
         physical_pressed != footswitch.raw_pressed;
 
     // When footswitch signal transitions, continue recognizing the gesture
