@@ -18,6 +18,7 @@
 #include "display/lcd_st7789.hpp"
 #include "tuner_settings.hpp"
 #include "ui/menu_controller.hpp"
+#include "storage/settings_storage.hpp"
 
 namespace
 {
@@ -83,8 +84,15 @@ int main()
     // Whether the notch filters have been initialized and have usable history
     bool filter_initialized = false;
 
-    // Settings accepted when returning from menu
+    // Restore settings before configuring tuning feedback and filter mode
     TunerSettings selected_settings{};
+    const bool settings_loaded = settings_storage::load(selected_settings);
+    DEBUG_PRINT(
+        "%s\n",
+        settings_loaded
+            ? "Settings loaded from flash"
+            : "No valid saved settings, using defaults");
+
     // Create tuning feedback config
     TuningConfig tuning_config 
     {
@@ -219,8 +227,32 @@ int main()
             }
             else if (action == MenuAction::ReturnToTuner)
             {
-                // Retain the accepted selections
-                selected_settings = menu.state().settings;
+                const TunerSettings requested_settings = menu.state().settings;
+
+                // Acquisition is already stopped while the menu is open; save settings to flash memory
+                const settings_storage::SaveResult save_result =
+                    settings_storage::save(requested_settings);
+
+                if (save_result == settings_storage::SaveResult::Failed)
+                {
+                    DEBUG_PRINT("Settings save failed\n");
+
+                    // Keep the menu open so the user can retry
+                    lcd::fill_rect(12, 198, 216, 32, 0x0000);
+                    lcd::draw_string(12, 200, "SAVE FAILED", 0xF800, 0x0000, 2);
+                    lcd::draw_string(12, 220, "BOTH ON RETURN TO RETRY", 0xFFFF, 0x0000, 1);
+
+                    continue;
+                }
+
+                DEBUG_PRINT(
+                    "%s\n",
+                    save_result == settings_storage::SaveResult::Saved
+                        ? "Settings saved"
+                        : "Settings unchanged, no flash write");
+
+                // Accept settings only after successful save
+                selected_settings = requested_settings;
 
                 // Apply the selected reference frequency to note mapping and cents calculation
                 tuning_config.a4_frequency_hz = static_cast<float>(selected_settings.a4_frequency_hz);
