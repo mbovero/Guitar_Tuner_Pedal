@@ -446,6 +446,23 @@ void lcd::draw_string(
     }
 }
 
+// Draw a full screen image encoded in RGB565 wire order
+bool lcd::draw_image_rgb565(const uint8_t* pixels, size_t byte_count)
+{
+    constexpr size_t expected_bytes =
+        static_cast<size_t>(width) * height * 2u;
+
+    if (pixels == nullptr || byte_count != expected_bytes)
+    {
+        return false;
+    }
+
+    set_window(0, 0, width - 1, height - 1);
+    write_data(pixels, byte_count);
+
+    return true;
+}
+
 // Control the backlight without changing display memory
 void lcd::set_backlight(bool enabled)
 {

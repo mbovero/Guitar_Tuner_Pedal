@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 
 namespace lcd
 {
@@ -39,6 +40,8 @@ namespace lcd
         uint16_t foreground,
         uint16_t background,
         uint8_t scale = 1);
+
+    bool draw_image_rgb565(const uint8_t* pixels, size_t byte_count);
 
     void set_backlight(bool enabled);
     void sleep();
