@@ -1,4 +1,5 @@
 #include "lcd_st7789.hpp"
+#include "tuner_config.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -95,14 +96,43 @@ namespace
         sleep_ms(100);
     }
 
+    struct PanelOrientation
+    {
+        uint8_t madctl;
+        uint16_t x_offset;
+        uint16_t y_offset;
+    };
+
+    constexpr PanelOrientation get_panel_orientation()
+    {
+        switch (DisplayConfig::rotation)
+        {
+            case DisplayConfig::Rotation::Deg0:
+                return {0x00, 0, 0};
+
+            case DisplayConfig::Rotation::Clockwise90:
+                return {0x60, 0, 0};
+
+            case DisplayConfig::Rotation::Deg180:
+                return {0xC0, 0, 80};
+
+            case DisplayConfig::Rotation::CounterClockwise90:
+                return {0xA0, 80, 0};
+        }
+
+        return {0x00, 0, 0};
+    }
+
+    constexpr PanelOrientation panel_orientation = get_panel_orientation();
+
     // Configure's LCD controller's pixel format, orientation, and panel settings
     void configure_panel()
     {
         // Pixel format and orientation were chosen. Documentation on the commands can be found here:
         // https://www.waveshare.com/w/upload/a/ae/ST7789_Datasheet.pdf
 
-        // Memory access direction: initial, unrotated configuration
-        write_register(0x36, {0x00});
+        // Configure axis order and direction for the selected display rotation
+        write_register(0x36, {panel_orientation.madctl});
 
         // Pixel format: 16-bit RGB565 on the MCU interface
         write_register(0x3A, {0x05});
@@ -149,6 +179,12 @@ namespace
         uint16_t x_end,
         uint16_t y_end)
     {
+        // Translate logical screen coordinates into controller memory coordinates (allows for display rotation)
+        x_start += panel_orientation.x_offset;
+        x_end += panel_orientation.x_offset;
+        y_start += panel_orientation.y_offset;
+        y_end += panel_orientation.y_offset;
+
         // Set column range
         write_register(0x2A, {
             static_cast<uint8_t>(x_start >> 8),     // Write upper bits

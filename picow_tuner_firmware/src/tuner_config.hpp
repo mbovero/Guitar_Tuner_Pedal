@@ -57,6 +57,20 @@ namespace ProcessedSampleLimits
     inline constexpr int32_t maximum = 8191;
 }
 
+namespace DisplayConfig
+{
+    enum class Rotation
+    {
+        Deg0,
+        Clockwise90,
+        Deg180,
+        CounterClockwise90
+    };
+
+    // Applied rotation relative to the unrotated display
+    inline constexpr Rotation rotation = Rotation::CounterClockwise90;
+}
+
 namespace ButtonInputConfig
 {
     // Active-low menu inputs with internal pull-ups
