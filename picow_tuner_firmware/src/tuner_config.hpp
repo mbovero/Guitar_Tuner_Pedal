@@ -74,8 +74,8 @@ namespace DisplayConfig
 namespace ButtonInputConfig
 {
     // Active-low menu inputs with internal pull-ups
-    inline constexpr unsigned left_gpio = 14;
-    inline constexpr unsigned right_gpio = 15;
+    inline constexpr unsigned left_gpio = 22;
+    inline constexpr unsigned right_gpio = 27;
 
     // Input must remain unchanged for this long before being accepted (debouncing)
     inline constexpr uint32_t debounce_ms = 25;
@@ -84,7 +84,7 @@ namespace ButtonInputConfig
 namespace FootswitchConfig
 {
     // Active-low input with an internal pull-up
-    inline constexpr unsigned gpio = 13;
+    inline constexpr unsigned gpio = 28;
 
     // Duration of an accepted press before reporting a hold
     inline constexpr uint32_t  hold_ms = 1000;
