@@ -68,7 +68,7 @@ target_compile_definitions(picow_tuner_firmware PRIVATE
 )
 
 target_compile_definitions(picow_tuner_firmware PRIVATE
-    TUNER_DEBUG=1
+    TUNER_DEBUG=0
 )
 
 pico_set_program_name(picow_tuner_firmware "picow_tuner_firmware")
