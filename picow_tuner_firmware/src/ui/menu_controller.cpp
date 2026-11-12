@@ -56,7 +56,7 @@ MenuAction MenuController::handle_event(ButtonEvent event)
         const int current_item = static_cast<int>(state_.selected_item);
 
         // Adding item_count keeps the value nonnegative before modulo
-        const int next_item = (current_item + direction + item_count) % item_count;
+        const int next_item = (current_item - direction + item_count) % item_count;
 
         state_.selected_item = static_cast<MenuItem>(next_item);
 
@@ -71,7 +71,7 @@ MenuAction MenuController::handle_event(ButtonEvent event)
 
         const int current_mode = static_cast<int>(state_.settings.filter_mode);
 
-        const int next_mode = (current_mode + direction + mode_count) % mode_count;
+        const int next_mode = (current_mode - direction + mode_count) % mode_count;
 
         state_.settings.filter_mode = static_cast<FilterMode>(next_mode);
 
