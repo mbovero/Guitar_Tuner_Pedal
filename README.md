@@ -31,7 +31,7 @@ flowchart LR
     A["Guitar input and analog conditioning"] --> B["Pico W ADC and DMA"]
     B --> C["Optional hum filter"]
     C --> D["YIN pitch estimation"]
-    D --> E["LCD Note and tuning feedback"]
+    D --> E["LCD: Note and tuning feedback"]
 ```
 
 The analog circuit biases, amplifies, and low-pass filters the guitar signal before the Raspberry Pi Pico W samples it. DMA transfers the samples into alternating buffers, giving the C++ firmware a complete frame to process while the next one fills. When enabled, the hum filter attenuates mains hum and its harmonics. If the signal is strong enough, YIN estimates its fundamental frequency. The firmware uses the selected A4 reference to find the nearest note, calculate the error in cents, and draw the feedback on a 1.54-inch SPI LCD.
