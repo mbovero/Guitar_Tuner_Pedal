@@ -22,7 +22,7 @@ The display shows the closest note and its octave, the measured and target frequ
 
 The hum filter can be set to **Off**, **50 Hz**, or **60 Hz**. The A4 reference defaults to **440 Hz** and can be adjusted from **400 to 480 Hz** in 1 Hz steps. The pedal saves both settings across power cycles.
 
-*Demo placeholder — tune a string from flat or sharp to center.*
+**[Watch the tuning demo on YouTube](https://www.youtube.com/shorts/BKNKsuMlq5k)**
 
 ## How it works
 
